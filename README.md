@@ -1,5 +1,5 @@
-# MADHATs Claude Enhancement Stack
-**The-MDC/MADHATs-Claude-Enhancement**
+# MADGambit Claude Enhancement Stack
+**The-MDC/MAD Gambit-Claude-Enhancement**
 
 Complete Claude + Claude Code enhancement system for MADHATs Gambit. Combines:
 - **Ruben Hassid's Cowork system** (how-to-ai.guide)
