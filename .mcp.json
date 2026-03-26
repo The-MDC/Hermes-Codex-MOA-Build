@@ -1,0 +1,39 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "type": "url",
+      "url": "https://mcp.supabase.com/mcp",
+      "description": "Supabase DB access — MADHATs platform database"
+    },
+    "github": {
+      "type": "url",
+      "url": "https://mcp.github.com/mcp",
+      "description": "GitHub — The-MDC org access"
+    },
+    "alchemy": {
+      "type": "url",
+      "url": "https://mcp.alchemy.com/mcp",
+      "description": "Alchemy MCP — blockchain data, NFT APIs, AA-SDK"
+    },
+    "figma": {
+      "type": "url",
+      "url": "https://mcp.figma.com/mcp",
+      "description": "Figma — design assets, mockups"
+    },
+    "gmail": {
+      "type": "url",
+      "url": "https://gmail.mcp.claude.com/mcp",
+      "description": "Gmail — investor and partner email"
+    },
+    "google-drive": {
+      "type": "url",
+      "url": "https://drive.mcp.claude.com/mcp",
+      "description": "Google Drive — shared docs and decks"
+    },
+    "netlify": {
+      "type": "url",
+      "url": "https://netlify-mcp.netlify.app/mcp",
+      "description": "Netlify — deployment and hosting"
+    }
+  }
+}
