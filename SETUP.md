@@ -29,7 +29,7 @@ Go to **Settings → Connectors → Browse** and add:
 - Google Drive (for shared docs)
 - Notion (for project management)
 - Slack (for team communication)
-- Supabase (for database access)
+- Neon (for database access)
 
 ## Step 6: Install Plugins
 Go to **claude.com/plugins** and install:

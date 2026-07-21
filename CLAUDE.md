@@ -15,7 +15,7 @@
 
 ## Tech Stack
 - Frontend: React 18, TypeScript, Hono/HonoX, TailwindCSS
-- Backend: Supabase (Postgres + Edge Functions), Node.js
+- Backend: Neon (Postgres) + Drizzle ORM, Vercel (Next.js API routes), Node.js
 - Blockchain: Solidity, Foundry, OpenZeppelin, Hardhat
 - Chains: Base L2 (primary), Arbitrum, HyperEVM
 - Oracles: Chainlink VRF + Price Feeds, Pyth Network
