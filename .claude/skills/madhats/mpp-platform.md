@@ -6,7 +6,7 @@ frontend components, prediction market mechanics, tokenomics implementation.
 
 ## Platform Architecture
 - Frontend: React 18 + TypeScript + TailwindCSS + Hono/HonoX
-- Backend: Supabase (Postgres + Edge Functions + Realtime)
+- Backend: Neon (Postgres) + Drizzle ORM, Vercel (Next.js API routes)
 - Blockchain layer: Foundry contracts + Alchemy AA-SDK
 - AI layer: Claude Opus 4.6 + MCP servers + GraphRAG
 
@@ -24,7 +24,7 @@ frontend components, prediction market mechanics, tokenomics implementation.
 - Typography: monospace accents, clean sans-serif body
 - Components: pixel-perfect, responsive (desktop → tablet → mobile)
 
-## Database Schema Conventions (Supabase)
+## Database Schema Conventions (Neon / Drizzle)
 - All tables: snake_case naming
 - UUID primary keys
 - created_at / updated_at on all tables
@@ -32,7 +32,7 @@ frontend components, prediction market mechanics, tokenomics implementation.
 - Soft deletes: deleted_at column, never hard delete
 
 ## API Design
-- RESTful endpoints via Supabase Edge Functions
+- RESTful endpoints via Next.js API routes on Vercel
 - Response format: `{ data, error, meta }` always
-- Auth: Supabase Auth + wallet signature verification
+- Auth: SIWE wallet signature verification (custom, Neon-backed sessions)
 - Rate limiting on all public endpoints
