@@ -1,10 +1,11 @@
 name: Compile Agentic Workflows
 
-# Keeps the compiled .lock.yml files in .github/workflows/ in sync with
-# their .md sources. gh-aw (github/gh-aw) treats the .md file as the
-# editable source of truth and the .lock.yml as the generated GitHub
-# Actions workflow that actually runs — both are committed, and this job
-# fails the PR if someone edited a .md without re-running `gh aw compile`.
+# Compiles gh-aw's .md workflow sources into their .lock.yml GitHub Actions
+# equivalents and commits the result back onto the same branch, so nobody —
+# human or agent — needs `gh` CLI installed locally to keep them in sync.
+# This runs entirely inside GitHub Actions, which has full internet access;
+# the sandboxed agent environment that originally authored these .md files
+# does not, by design (see .claude/skills/ecc/gh-aw-agentic-workflows.md).
 #
 # This workflow itself is hand-written, plain GitHub Actions YAML — it is
 # NOT gh-aw source, so it needs no compilation step of its own.
@@ -16,36 +17,67 @@ on:
   workflow_dispatch: {}
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: agentic-compile-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  compile-check:
+  compile:
     runs-on: ubuntu-latest
     steps:
+      - name: Determine branch
+        id: branch
+        run: echo "name=${{ github.head_ref || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
       - name: Checkout
         uses: actions/checkout@v6
+        with:
+          ref: ${{ steps.branch.outputs.name }}
+
+      # If the last commit on this branch was already an auto-compile, the
+      # .md sources haven't changed since, so re-running would just produce
+      # an identical no-op commit. This also blocks the trivial self-trigger
+      # loop: pushing a commit here fires `synchronize` again, and that next
+      # run stops itself right here instead of doing (harmless) extra work.
+      - name: Skip if the last commit was already an auto-compile
+        id: guard
+        run: |
+          author="$(git log -1 --format='%an')"
+          if [ "$author" = "github-actions[bot]" ]; then
+            echo "Last commit was already an auto-compile — nothing to do."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Install gh-aw
+        if: steps.guard.outputs.skip != 'true'
         uses: github/gh-aw/actions/setup-cli@main
         with:
-          # Pinned for supply-chain hygiene per this repo's common-security.md.
-          # gh-aw is in technical preview and moves fast — check
-          # https://github.com/github/gh-aw/releases for the current tag
-          # before assuming this is still current.
+          # Pinned for supply-chain hygiene per this org's common-security.md.
+          # Confirmed working (v0.37.18 installs and compiles cleanly as of
+          # 2026-08-14) — bump deliberately, not reflexively, and re-verify
+          # a compile run after doing so. Current releases:
+          # https://github.com/github/gh-aw/releases
           version: v0.37.18
 
       - name: Compile workflows
+        if: steps.guard.outputs.skip != 'true'
         run: gh aw compile
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Fail if compiled output is out of date
+      - name: Commit and push if the compiled output changed
+        if: steps.guard.outputs.skip != 'true'
         run: |
-          if ! git diff --exit-code -- '.github/workflows/*.lock.yml'; then
-            echo "::error::Compiled .lock.yml files are out of date. Run 'gh aw compile' locally and commit the result."
-            exit 1
+          git add '.github/workflows/*.lock.yml'
+          if git diff --cached --quiet; then
+            echo "Compiled output already up to date."
+            exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore(gh-aw): recompile agentic workflow(s) [auto]"
+          git push origin "HEAD:${{ steps.branch.outputs.name }}"

@@ -21,7 +21,7 @@ network:
     - api.anthropic.com
 tools:
   github:
-    toolsets: [pull_requests, issues, code_search]
+    toolsets: [pull_requests, issues, search]
   edit:
   bash:
     - "node scripts/harness-audit.js*"
@@ -33,14 +33,15 @@ safe-outputs:
 ---
 
 <!--
-  NOTE (read before activating): this is uncompiled gh-aw SOURCE. Run
-  `gh aw compile` locally (after `gh extension install github/gh-aw`) to
-  generate the paired `agentic-harness-audit.lock.yml` and validate this
-  frontmatter against whatever the current gh-aw schema is — gh-aw was in
-  technical preview when this was written, and the exact nesting of the
-  `tools:` block in particular is the most likely thing to have drifted.
-  See `.claude/skills/ecc/gh-aw-agentic-workflows.md` for the full
-  activation runbook (secrets, compile step, enabling Actions).
+  `.lock.yml` is generated and kept in sync automatically by
+  agentic-compile.yml (runs in GitHub Actions on every push to this file).
+  Still requires an ANTHROPIC_API_KEY repo secret to actually run — see
+  `.claude/skills/ecc/gh-aw-agentic-workflows.md` for the activation
+  runbook. If a future compile run finds another schema error (the `bash:`
+  command-pattern block in particular was never separately verified),
+  fix it the same way this one was found: read the actual compile-check
+  job log, not the schema docs — the compiler's own error message names
+  the exact bad value.
 -->
 
 # Harness Audit — ECC Agent Harness
