@@ -1,0 +1,51 @@
+name: Compile Agentic Workflows
+
+# Keeps the compiled .lock.yml files in .github/workflows/ in sync with
+# their .md sources. gh-aw (github/gh-aw) treats the .md file as the
+# editable source of truth and the .lock.yml as the generated GitHub
+# Actions workflow that actually runs — both are committed, and this job
+# fails the PR if someone edited a .md without re-running `gh aw compile`.
+#
+# This workflow itself is hand-written, plain GitHub Actions YAML — it is
+# NOT gh-aw source, so it needs no compilation step of its own.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentic-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install gh-aw
+        uses: github/gh-aw/actions/setup-cli@main
+        with:
+          # Pinned for supply-chain hygiene per this repo's common-security.md.
+          # gh-aw is in technical preview and moves fast — check
+          # https://github.com/github/gh-aw/releases for the current tag
+          # before assuming this is still current.
+          version: v0.37.18
+
+      - name: Compile workflows
+        run: gh aw compile
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Fail if compiled output is out of date
+        run: |
+          if ! git diff --exit-code -- '.github/workflows/*.lock.yml'; then
+            echo "::error::Compiled .lock.yml files are out of date. Run 'gh aw compile' locally and commit the result."
+            exit 1
+          fi
