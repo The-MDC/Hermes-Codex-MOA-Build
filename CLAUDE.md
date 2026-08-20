@@ -20,7 +20,18 @@
 - Seed: **$1.24M–$2.48M** | Pre-money: **$12M** | SAFE or equity
 - Y3 revenue headline: **$139.6M gross, base case** ($177.7M is bull case ONLY — never the headline)
 - Entity: **New Mexico LLC** (filed) — NOT Wyoming
-- Live deck: https://maddegen.github.io/MADHATs-Gambit-Presentation/
+- **Live surfaces** (verified 2026-08-20):
+  - Data room (canonical): `https://mad-mpp-2-23-madgambit.vercel.app/pitch/index.html` — built from
+    `The-MDC/MAD-MPP-2.23` → `verify/public/pitch/`. **Currently behind Vercel SSO**, so a link
+    handed to an investor lands on a login page until Deployment Protection is turned off.
+  - Three-Minute Room: `.../pitch/3min.html` · OV deck: `.../pitch/ov-pitch-deck.html`
+  - Investor deck the app links out to: `https://o-vdeck26.vercel.app` — public, no SSO, **stale**
+    (see open conflicts). Referenced from `verify/lib/node-registry.ts` and `portal-tab.tsx`.
+  - ~~`https://maddegen.github.io/MADHATs-Gambit-Presentation/`~~ — **dead**. The repo 404s under
+    both `MADdegen/` and `The-MDC/`. Do not hand this URL to anyone.
+- **Canonical repo**: `The-MDC/MAD-MPP-2.23`. The MAD Gambit main has always lived in
+  `MAD-MPP-2.23`; the repo now sits in the MDC enterprise org. GitHub redirects the old
+  `MADdegen/` path, but Vercel's Git integration did **not** survive the move — see open conflicts.
 
 ### ⚠️ Open conflicts — do not state these publicly until resolved
 - **Staking tiers**: code has 6 tiers (100/500/2,500/10,000/50,000/100,000 at 12/18/28/42/58/68%);
@@ -28,6 +39,18 @@
 - **A second fee model is deployed somewhere**: a "1.888% RATE" schedule splitting burn 0.888% /
   staking 0.500% / protect 0.500%, with **no creator share**. Locate and reconcile to 1.88%.
 - **Y3 stream split 51/31/12/6** derives from the retired $154.5M model — re-run before use.
+- **The live investor deck says Wyoming.** `o-vdeck26.vercel.app` states "Manager-Managed Wyoming
+  LLC", "Wyoming Legal Guardrails", "Wyoming tax filing" and "Wyoming Registered, SEC Compliant LLC
+  Architecture" — 7 occurrences, checked 2026-08-20. Canon is **New Mexico LLC (filed)**, and
+  "SEC Compliant" / "SEC-exempt token issuance" also breach the no-claim-without-evidence rule.
+  `verify/public/pitch/ov-pitch-deck.html` in this repo is already corrected; the deployed bundle
+  is built from a different source. **Find that source and rebuild before the deck is shown again.**
+- **Vercel is not deploying `MAD-MPP-2.23`.** Last production build 2026-08-19 14:00 UTC; four
+  pushes since produced zero deployments. Merging to `main` does not reach the live site. Deploy
+  with `cd verify && npx vercel --prod` until the Git integration is reconnected to the MDC org.
+- **GitHub Actions is queue-blocked.** Repo-owned runs from 2026-08-18 and 2026-08-19 are still
+  `queued`; Dependabot's GitHub-hosted runs complete in seconds. Signature of an exhausted Actions
+  minutes / spending limit at the org level. No PR in this repo can show a green check until it clears.
 
 ### Never claim without evidence
 "15,000 users" (it is a **waitlist**) · measured retention · "industry's first" · "regulatory-safe" ·
