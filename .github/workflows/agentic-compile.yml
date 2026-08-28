@@ -1,0 +1,71 @@
+name: Compile Agentic Workflows
+
+# Compiles gh-aw's .md workflow sources and uploads the result as a build
+# artifact, then fails if the compiled .lock.yml differs from what's
+# committed.
+#
+# This does NOT auto-commit the compiled output. It tried to, once — the
+# default GITHUB_TOKEN a workflow run gets is deliberately forbidden by
+# GitHub from creating or modifying anything under .github/workflows/,
+# regardless of the `permissions:` granted here. That's a supply-chain
+# protection (a workflow can't use its own run to silently rewrite what
+# workflows are allowed to do), not a bug to work around. See the
+# "compiled-workflows" artifact this job uploads: download it and commit
+# the files normally (a human push, or an agent session with real push
+# credentials, both work fine — only the ephemeral Actions token is
+# restricted). To make this fully hands-off instead, add a repo secret
+# holding a PAT with `workflow` scope and wire the push step to use it —
+# see .claude/skills/ecc/gh-aw-agentic-workflows.md.
+#
+# This workflow itself is hand-written, plain GitHub Actions YAML — it is
+# NOT gh-aw source, so it needs no compilation step of its own.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/*.md"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: agentic-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Install gh-aw
+        uses: github/gh-aw/actions/setup-cli@main
+        with:
+          # Pinned for supply-chain hygiene per this org's common-security.md.
+          # Confirmed working (v0.37.18 installs and compiles this repo's
+          # workflows cleanly as of 2026-08-14) — bump deliberately, not
+          # reflexively, and re-verify a compile run after doing so.
+          # Current releases: https://github.com/github/gh-aw/releases
+          version: v0.37.18
+
+      - name: Compile workflows
+        run: gh aw compile
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload compiled workflows
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: compiled-workflows
+          path: .github/workflows/*.lock.yml
+          if-no-files-found: ignore
+
+      - name: Fail if compiled output is out of date
+        run: |
+          if ! git diff --exit-code -- '.github/workflows/*.lock.yml'; then
+            echo "::error::Compiled .lock.yml files are out of date. Download this run's 'compiled-workflows' artifact and commit it (a normal git push works fine — only this job's own GITHUB_TOKEN is blocked from touching .github/workflows/), or ask Claude to do it in a live session."
+            exit 1
+          fi
