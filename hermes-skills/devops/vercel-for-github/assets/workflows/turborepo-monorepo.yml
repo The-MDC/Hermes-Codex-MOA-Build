@@ -1,0 +1,72 @@
+# .github/workflows/ci-cd.yml
+#
+# Monorepo pipeline: one build/test/lint gate, then fan out to preview or
+# production. `needs: build-and-test` guarantees nothing deploys on a red build
+# -- which is the entire reason to run this instead of the native integration.
+#
+# Turborepo remote caching is configured automatically when builds run ON Vercel.
+# The moment builds move into Actions runners, TURBO_TOKEN / TURBO_TEAM become
+# your responsibility.
+#
+# Multiple projects from one repo: create one secret per project
+# (VERCEL_PROJECT_ID_APP, VERCEL_PROJECT_ID_DOCS) via `vercel link` against each,
+# then duplicate the deploy jobs with the matching ID.
+
+name: CI/CD with Turborepo and Vercel
+
+on:
+  push:
+    branches: ["main", "develop"]
+  pull_request:
+    types: [opened, synchronize]
+
+env:
+  TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+  TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+jobs:
+  build-and-test:
+    name: Build and Test
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2     # Turborepo needs the previous commit to diff against
+      - uses: pnpm/action-setup@v3
+        with:
+          version: 8
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install
+      - run: pnpm build
+      - run: pnpm test
+      - run: pnpm lint
+
+  deploy-preview:
+    name: Deploy Preview
+    needs: build-and-test
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global vercel@latest
+      - run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+      - run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+      - run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
+
+  deploy-production:
+    name: Deploy Production
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install --global vercel@latest
+      - run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+      - run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+      - run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}

@@ -1,0 +1,51 @@
+# .github/workflows/vercel-production.yml
+#
+# Production deployment on push to main.
+#
+# Differs from preview in exactly two ways:
+#   1. --prod on BOTH `vercel build` AND `vercel deploy`
+#      (--prod on deploy alone builds PREVIEW env vars into a PRODUCTION deployment
+#       -- the quietest failure mode in this whole area)
+#   2. trigger restricted to the production branch
+#
+# Prerequisites: same three secrets, and vercel.json with
+#   { "git": { "deploymentEnabled": false } }
+
+name: Vercel Production Deployment
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  push:
+    branches:
+      - main
+
+  # --- Tag-triggered production instead of branch-triggered ---------------
+  # Replace the `branches:` block above with:
+  #   tags: ['*']
+  # Keep every --prod flag exactly as-is.
+  # ------------------------------------------------------------------------
+
+jobs:
+  Deploy-Production:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Build Project Artifacts
+        run: vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+
+      # Optional: on very large trees, avoid the files limit.
+      # NOTE --archive can make deploys SLOWER; it defeats source-file upload caching.
+      # run: vercel deploy --prebuilt --prod --archive=tgz --token=${{ secrets.VERCEL_TOKEN }}

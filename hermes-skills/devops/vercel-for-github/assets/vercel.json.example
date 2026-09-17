@@ -1,0 +1,39 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+
+  "//": "GIT CONFIGURATION REFERENCE — delete the keys you do not need.",
+
+  "//git.deploymentEnabled": [
+    "Object of branch->boolean, or a plain boolean. Default true.",
+    "PRECEDENCE TRAP: if a branch matches multiple rules and AT LEAST ONE is true,",
+    "the deployment occurs. {'experiment-*': false, '*-dev': true} still deploys",
+    "'experiment-my-branch-dev'. true wins.",
+    "Set to a bare false when building in GitHub Actions, or both the native",
+    "integration and your workflow deploy on the same push."
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "dev": false,
+      "internal-*": false
+    }
+  },
+
+  "//github.autoJobCancelation": [
+    "Boolean, default true. Note the spelling: one 'l'.",
+    "Default behaviour: while a build for an earlier commit on the same branch",
+    "runs, newer commits queue; when it finishes only the MOST RECENT deploys and",
+    "the rest are cancelled. Set false to build every push in sequence.",
+    "No GitLab or Bitbucket equivalent."
+  ],
+  "github": {
+    "autoJobCancelation": true
+  },
+
+  "//deprecated": [
+    "github.silent  -> replaced by Settings > Git > Connected Git Repository toggles.",
+    "github.enabled -> replaced by git.deploymentEnabled. ALSO BLOCKS DEPLOY HOOKS,",
+    "                  which the modern flag does not. If deploy hooks silently do",
+    "                  nothing, look for this legacy key.",
+    "github.autoAlias -> use the staged production build + promote workflow instead."
+  ]
+}
