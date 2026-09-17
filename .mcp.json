@@ -34,6 +34,11 @@
       "type": "url",
       "url": "https://netlify-mcp.netlify.app/mcp",
       "description": "Netlify — deployment and hosting"
+    },
+    "hermes": {
+      "command": "hermes",
+      "args": ["mcp", "serve"],
+      "description": "Hermes Agent — messaging bridge across 30+ platforms (stdio, requires hermes on PATH)"
     }
   }
 }
