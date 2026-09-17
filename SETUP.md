@@ -87,6 +87,25 @@ Then use AskUserQuestion to clarify before executing.
 Apply the relevant skill from .claude/skills/ before starting.
 ```
 
+## Step 10: Local and NVIDIA inference (optional)
+
+Runs Hermes with Kimi-K3 on your NVIDIA NIM account and TripleTrouble-V3 on your own
+machine, with subagents kept off the metered endpoint.
+
+```bash
+cp configs/hermes/config.yaml ~/.hermes/config.yaml   # back up yours first
+printf 'NVIDIA_API_KEY=%s\n' 'nvapi-…' >> ~/.hermes/.env && chmod 600 ~/.hermes/.env
+scripts/nim-preflight.sh          # proves the route before Hermes depends on it
+scripts/nim-preflight.sh --list   # every model your key can reach
+```
+
+- `docs/models/running-the-stack.md` — install order, quant choice, the two traps,
+  and the NVIDIA AI Workbench path
+- `docs/models/kimi-k3-quants.md` — why Kimi-K3 is an API model and not a local one
+
+The key is read from the environment. It never goes in `config.yaml`, and both the
+preflight and CI fail if anything key-shaped is committed.
+
 ## Folder Reference
 ```
 MADHATs-Cowork/
@@ -107,6 +126,10 @@ MADHATs-Cowork/
 │   ├── content/                 ← Blog, social, newsletter
 │   └── outreach/                ← VC + partner email templates
 ├── OUTPUTS/                     ← All Claude-generated files land here
+├── configs/
+│   └── hermes/config.yaml       ← Hermes model routing (NIM + local)
+├── docs/models/                 ← quant survey, stack setup
+├── scripts/                     ← doctor, canonical-numbers, NIM preflight
 └── .claude/
     ├── skills/                  ← 75+ skill files (Anthropic + ECC + MADHATs)
     ├── commands/                ← Slash commands
