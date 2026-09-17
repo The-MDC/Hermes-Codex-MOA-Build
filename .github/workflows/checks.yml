@@ -7,13 +7,16 @@
 #        with CLAUDE.md on every PR, not just when someone remembers to run the script.
 #
 #     2. It gives CodeQL's `actions` extractor something to extract. Code scanning
-#        default setup has the `actions` language enabled for this repository. With no
-#        workflow file anywhere under .github/workflows/, the extractor finds no Actions
-#        code and the "Analyze (actions)" job fails with a configuration error:
+#        default setup has the `actions` language enabled for this repository, and on a
+#        pull request the analysis is diff-informed: it looks at the files this PR
+#        changes, not the whole tree. This PR's first commit added .github/ content that
+#        contains no workflow — a PR template — so the actions extractor had nothing in
+#        the diff range it could parse, and "Analyze (actions)" failed with:
 #            "CodeQL could not process any code written in GitHub Actions."
-#        The scheduled scans of the default branch pass only because there is no
-#        .github/ directory there at all. The moment .github/ exists with no workflow
-#        in it, that job goes red. This file is the fix.
+#            "CodeQL job status was configuration error."
+#        The base branch passes the same job because its diffs do touch
+#        .github/workflows/agentic-compile.yml. Putting a real workflow in this PR's own
+#        diff is the fix.
 #
 # Deliberately does NOT gate on scripts/madhats-doctor.sh yet. The doctor currently
 # exits 1 on a real, pre-existing bug — .claude/hooks/hooks.json references 15 scripts

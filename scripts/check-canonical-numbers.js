@@ -71,8 +71,61 @@ function canonicalSpec(declared) {
       extract: /\$\s?(\d+(?:\.\d+)?)\s*M/i,
       allowed: [],
     },
+    // Present only once CLAUDE.md declares it; absent before the 2026-08-19 reconciliation.
+    ...(declared.shieldRecovery ? [{
+      key: 'MAD Shield recovery',
+      label: /mad\s*shield\s+(?:standard\s+)?recovery|shield\s+recovery/i,
+      canonical: declared.shieldRecovery,
+      extract: /(\d+(?:\.\d+)?)\s*%/,
+      allowed: [],
+    }] : []),
   ];
 }
+
+/**
+ * How each declared value is read out of CLAUDE.md's Canonical Numbers block.
+ *
+ * Several patterns per concept, tried in order, because the block has been rewritten
+ * before and will be again. The 2026-08-19 data-room reconciliation restated the split
+ * as one line — "Fee split *of the 1.88%*: creator **40%** · community **28.8%** ·
+ * MAD Shield recovery **28.8%**" — where it had previously been three separate
+ * "Community profit share: **28.8%**" bullets. A parser written against only the older
+ * shape reports the section as unreadable, which is what CI caught. Keeping both shapes
+ * means a future rewording degrades to a loud failure rather than a silent pass.
+ */
+const DECLARATION_PATTERNS = {
+  platformFee: {
+    label: 'platform fee',
+    required: true,
+    patterns: [/Platform fee:\s*\*\*(\d+(?:\.\d+)?)\s*%/i],
+  },
+  creatorShare: {
+    label: 'creator share',
+    required: true,
+    patterns: [
+      /creator\s+\*\*(\d+(?:\.\d+)?)\s*%/i,                          // 2026-08-19 fee-split line
+      /Creator market revenue share:\s*\*\*(\d+(?:\.\d+)?)\s*%/i,    // pre-reconciliation
+    ],
+  },
+  communityShare: {
+    label: 'community share',
+    required: true,
+    patterns: [
+      /community\s+\*\*(\d+(?:\.\d+)?)\s*%/i,
+      /Community profit share:\s*\*\*(\d+(?:\.\d+)?)\s*%/i,
+    ],
+  },
+  shieldRecovery: {
+    label: 'MAD Shield recovery',
+    required: false, // absent before the 2026-08-19 reconciliation
+    patterns: [/MAD Shield recovery\s+\*\*(\d+(?:\.\d+)?)\s*%/i],
+  },
+  preMoney: {
+    label: 'pre-money',
+    required: true,
+    patterns: [/Pre-money:\s*\*\*\$\s?(\d+(?:\.\d+)?)\s*M/i],
+  },
+};
 
 /** Read the declared values out of CLAUDE.md. This file is the source of truth. */
 function readDeclared() {
@@ -89,21 +142,22 @@ function readDeclared() {
   }
   const block = section.split(/\n##\s/)[0];
 
-  const grab = (re, what) => {
-    const m = block.match(re);
-    if (!m) {
-      console.error(`check-canonical-numbers: could not read ${what} from CLAUDE.md`);
+  const out = {};
+  for (const [key, spec] of Object.entries(DECLARATION_PATTERNS)) {
+    let value = null;
+    for (const re of spec.patterns) {
+      const m = block.match(re);
+      if (m) { value = m[1]; break; }
+    }
+    if (value === null && spec.required) {
+      console.error(`check-canonical-numbers: could not read ${spec.label} from CLAUDE.md`);
+      console.error('  The Canonical Numbers block was found but does not match any known shape.');
+      console.error('  If the block was reworded, add the new shape to DECLARATION_PATTERNS.');
       process.exit(1);
     }
-    return m[1];
-  };
-
-  return {
-    platformFee: grab(/Platform fee:\s*\*\*(\d+(?:\.\d+)?)%/i, 'platform fee'),
-    communityShare: grab(/Community profit share:\s*\*\*(\d+(?:\.\d+)?)%/i, 'community share'),
-    creatorShare: grab(/Creator market revenue share:\s*\*\*(\d+(?:\.\d+)?)%/i, 'creator share'),
-    preMoney: grab(/Pre-money:\s*\*\*\$(\d+(?:\.\d+)?)M/i, 'pre-money'),
-  };
+    out[key] = value;
+  }
+  return out;
 }
 
 function* walk(dir) {
@@ -170,6 +224,9 @@ function main() {
       console.log(`  platform fee            ${declared.platformFee}%`);
       console.log(`  community profit share  ${declared.communityShare}%  (28% allowed in presentations)`);
       console.log(`  creator revenue share   ${declared.creatorShare}%`);
+      if (declared.shieldRecovery) {
+        console.log(`  MAD Shield recovery     ${declared.shieldRecovery}%`);
+      }
       console.log(`  pre-money valuation     $${declared.preMoney}M`);
       console.log('  every labelled restatement in the repo agrees with CLAUDE.md');
     }
