@@ -64,6 +64,21 @@ Already covered by Hermes, so nothing was ported: code checking and debugging
 `requesting-code-review`, `simplify-code`, `test-driven-development`) and containers
 (`docker-management`, `hermes-s6-container-supervision`).
 
+## Weight
+
+This tree is **8.2 MB**, and two skills are 6.9 MB of it:
+
+| Skill | Size | What the bulk is |
+|---|---|---|
+| `creative/canvas-design` | 5.6 MB | 54 `.ttf` font files |
+| `media/pptx` | 1.3 MB | 39 OOXML `.xsd` schemas |
+
+Both sets of assets are genuinely required — `canvas-design` renders with those exact
+fonts, and `pptx` validates against those exact schemas — so they are copied verbatim
+rather than stubbed. But if you would rather not carry binaries in this repo, drop those
+two entries from `INCLUDE` in `scripts/port-skills-to-hermes.js` and re-run; the
+remaining 27 skills total about 1.3 MB of text.
+
 ## Attribution
 
 Each skill's frontmatter carries its upstream author and licence, not this repo's.

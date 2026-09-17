@@ -51,7 +51,7 @@ function canonicalSpec(declared) {
     },
     {
       key: 'community profit share',
-      label: /community\s+(?:profit\s+)?share|profit\s+share/i,
+      label: /community\s+(?:profit\s+)?(?:share|pool|allocation)|profit\s+share/i,
       canonical: declared.communityShare,
       extract: /(\d+(?:\.\d+)?)\s*%/,
       // CLAUDE.md: "28.8% (display as 28% in presentations)"
@@ -193,11 +193,20 @@ function main() {
         // When one clause names more than one concept — "Community profit share: 28.8%
         // of platform fees" — the first-named concept is the subject and the rest are
         // context for it. Scoring the number against the later label inverts the claim.
+        //
+        // "of <label>" is always context, never the subject, even when it is the ONLY
+        // label in the clause. "Community pool: 28.8% of platform fees" states a
+        // community figure expressed as a proportion of the platform fee; reading 28.8
+        // as the platform fee is exactly backwards. Any label reached through "of" is
+        // the base being measured against, so it is skipped when choosing the subject.
+        const isBaseReference = (at) => /\bof\s+$/i.test(clause.slice(Math.max(0, at - 6), at));
+
         let subject = null;
         let subjectAt = Infinity;
         for (const c of spec) {
           const at = clause.search(c.label);
-          if (at !== -1 && at < subjectAt) { subject = c; subjectAt = at; }
+          if (at === -1 || isBaseReference(at)) continue;
+          if (at < subjectAt) { subject = c; subjectAt = at; }
         }
         if (!subject) continue;
 
