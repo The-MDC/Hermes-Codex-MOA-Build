@@ -1,0 +1,74 @@
+# Harness checks.
+#
+# WHY THIS EXISTS
+#     Two reasons, and the second one is not obvious.
+#
+#     1. It gates the checks this repo now ships: the canonical numbers must agree
+#        with CLAUDE.md on every PR, not just when someone remembers to run the script.
+#
+#     2. It gives CodeQL's `actions` extractor something to extract. Code scanning
+#        default setup has the `actions` language enabled for this repository. With no
+#        workflow file anywhere under .github/workflows/, the extractor finds no Actions
+#        code and the "Analyze (actions)" job fails with a configuration error:
+#            "CodeQL could not process any code written in GitHub Actions."
+#        The scheduled scans of the default branch pass only because there is no
+#        .github/ directory there at all. The moment .github/ exists with no workflow
+#        in it, that job goes red. This file is the fix.
+#
+# Deliberately does NOT gate on scripts/madhats-doctor.sh yet. The doctor currently
+# exits 1 on a real, pre-existing bug — .claude/hooks/hooks.json references 15 scripts
+# under .cursor/hooks/, a directory that does not exist, so none of those hooks have
+# ever run. Gating on it now would paint CI red for a defect this workflow did not
+# introduce and cannot fix. Masking it with continue-on-error would be worse: a check
+# that cannot fail is not a check. It becomes a gate in the PR that repairs the hooks.
+
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [The-MDC]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: harness checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node ships on ubuntu-latest and these scripts are plain CommonJS with no
+      # dependencies, so there is no setup-node step to get wrong.
+      - name: Syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/madhats-doctor.sh
+          node --check scripts/check-canonical-numbers.js
+
+      - name: Canonical numbers agree with CLAUDE.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/check-canonical-numbers.js | tee /tmp/canon.log
+
+      # An exit code of 0 is not proof the checker looked at anything. If the
+      # "Canonical Numbers" section of CLAUDE.md is renamed, or the walker stops
+      # reaching files, the script could pass while checking nothing at all. Assert
+      # it actually reported on every concept it claims to track.
+      - name: Assert the check was not silently empty
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -q "canonical numbers: OK"  /tmp/canon.log
+          grep -q "platform fee"           /tmp/canon.log
+          grep -q "community profit share" /tmp/canon.log
+          grep -q "creator revenue share"  /tmp/canon.log
+          grep -q "pre-money valuation"    /tmp/canon.log
