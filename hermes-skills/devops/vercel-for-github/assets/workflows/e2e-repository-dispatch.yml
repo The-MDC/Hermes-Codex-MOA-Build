@@ -1,0 +1,56 @@
+# .github/workflows/playwright-tests.yml
+#
+# Run E2E tests against the preview Vercel just finished deploying.
+#
+# HARD REQUIREMENT: this file must exist on the DEFAULT BRANCH (main) for
+# repository_dispatch to fire at all. Testing it from a feature branch does
+# nothing. The workflow_dispatch trigger below lets you fire it manually
+# while iterating, before the file is merged.
+#
+# Available dispatch types (all prefixed vercel.deployment.):
+#   ready, success, error, canceled, ignored, skipped, pending, failed, promoted
+#     ignored -> your Ignored Build Step aborted the build
+#     skipped -> monorepo unaffected-project detection skipped it
+
+name: Playwright Tests
+
+on:
+  repository_dispatch:
+    types:
+      - 'vercel.deployment.success'
+  workflow_dispatch:
+
+jobs:
+  run-e2es:
+    if: github.event_name == 'repository_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      # Check out the SHA that was actually deployed, not the tip of main --
+      # otherwise you test different code than the preview is running.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.client_payload.git.sha }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci && npx playwright install --with-deps
+
+      - name: Run tests
+        run: npx playwright test
+        env:
+          BASE_URL: ${{ github.event.client_payload.url }}
+          # Needed only if Deployment Protection is on, otherwise CI gets 401.
+          # Prefer Trusted Sources (OIDC, scoped to account/repo/branch) for new
+          # setups -- no long-lived shared secret to rotate or leak.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          path: playwright-report/

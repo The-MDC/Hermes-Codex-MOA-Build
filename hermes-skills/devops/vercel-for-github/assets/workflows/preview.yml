@@ -1,0 +1,42 @@
+# .github/workflows/vercel-preview.yml
+#
+# Preview deployment on every push to a non-production branch.
+#
+# Prerequisites:
+#   1. Repo secrets: VERCEL_TOKEN, VERCEL_ORG_ID, VERCEL_PROJECT_ID
+#        vercel login && vercel link      -> .vercel/project.json (orgId, projectId)
+#        vercel tokens add --project <n>  -> VERCEL_TOKEN (scoped, not account-wide)
+#   2. vercel.json MUST contain { "git": { "deploymentEnabled": false } }
+#      or you will get two deployments per commit.
+
+name: Vercel Preview Deployment
+
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+on:
+  push:
+    branches-ignore:
+      - main
+
+jobs:
+  Deploy-Preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      # pull BEFORE build so project settings and env vars are cached locally
+      - name: Pull Vercel Environment Information
+        run: vercel pull --yes --environment=preview --token=${{ secrets.VERCEL_TOKEN }}
+
+      # no --prod here: vercel build defaults to preview env vars, which is what we want
+      - name: Build Project Artifacts
+        run: vercel build --token=${{ secrets.VERCEL_TOKEN }}
+
+      # --prebuilt uploads .vercel/output only; without it Vercel rebuilds the same artifact
+      - name: Deploy Project Artifacts to Vercel
+        run: vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }}
