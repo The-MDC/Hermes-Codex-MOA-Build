@@ -60,6 +60,25 @@ This activates all hooks, instincts, and commands from `.claude/` folder.
 4. Connect GitHub in Settings → Connectors
 5. First prompt: "Read CLAUDE.md and all files in ABOUT-ME/. Summarize what you know about this project."
 
+## Step 9: Activate GitHub Agentic Workflows (gh-aw)
+Runs `/security`, `/quality-gate`, and `/harness-audit` automatically on
+PR/issue events via GitHub Actions, instead of only interactively. Full
+detail in `.claude/skills/ecc/gh-aw-agentic-workflows.md` — short version:
+
+1. `gh extension install github/gh-aw` (one time, needs the `gh` CLI —
+   this is a step you or CI runs, not Claude Code).
+2. `gh aw compile` from the repo root to generate/refresh each
+   `.github/workflows/*.lock.yml` from its `.md` source. Do this before
+   enabling anything — the shipped `.md` sources haven't been run through
+   the real compiler yet.
+3. Add an `ANTHROPIC_API_KEY` repo secret (Settings → Secrets and
+   variables → Actions) — required for `engine: claude`.
+4. Commit the compiled `.lock.yml` files, then open a PR touching the
+   relevant paths to confirm the workflow fires.
+
+These checks are advisory (PR comments), not blocking gates — they sit
+alongside each repo's existing deterministic CI, not in place of it.
+
 ## Starter Prompt (use every session)
 ```
 I want to [TASK] so that [SUCCESS CRITERIA].
@@ -86,7 +105,6 @@ MADHATs-Cowork/
 ├── TEMPLATES/
 │   ├── pitch/                   ← Deck + hotsheet templates
 │   ├── content/                 ← Blog, social, newsletter
-│   ├── specs/                   ← Technical spec templates
 │   └── outreach/                ← VC + partner email templates
 ├── OUTPUTS/                     ← All Claude-generated files land here
 └── .claude/
