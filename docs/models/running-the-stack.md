@@ -1,4 +1,4 @@
-# Running the stack: Kimi-K3 on NIM, TripleTrouble-V3 local
+# Running the stack: three providers, three rate-limit buckets
 
 What to install, in what order, and the two traps that cost a session each.
 
@@ -8,25 +8,52 @@ Quant survey: `docs/models/kimi-k3-quants.md`
 ## The shape of it
 
 ```
-  Hermes parent agent  ─────────────▶  moonshotai/kimi-k3
-                                       NVIDIA NIM · integrate.api.nvidia.com
-                                       2.8T params · 1M ctx · vision · always-thinking
+  parent agent    ──▶  moonshotai/kimi-k3        NVIDIA NIM
+                       2.8T · 1M ctx · vision     integrate.api.nvidia.com
 
-  Hermes subagents     ─────────────▶  TripleTrouble-V3
-  + the 429 fallback                   local llama.cpp or vLLM · 127.0.0.1
-                                       34.7B total / ~3.3B active · 131K ctx
+  subagents       ──▶  Qwen/Qwen3.6-35B-A3B      HF Inference Providers
+                       36B / 3B active            router.huggingface.co
+
+  429 fallback    ──▶  qwen/qwen3.5-122b-a10b    OpenRouter
+                       125B / 10B active          openrouter.ai
 ```
 
-Kimi-K3 does the thinking. Everything that fans out runs local and free.
+Three providers, three independent rate-limit buckets. A 429 on one cannot starve
+the others.
 
-**Why not run Kimi-K3 locally too:** there is no build that fits. The smallest unpruned
-GGUF is 466 GB; the smallest pruned build anyone has demonstrated is 319 GiB at 0.48 tok/s.
-Full reasoning in `kimi-k3-quants.md`.
+**Why Kimi-K3 is routed and not hosted:** there is no build that fits. The smallest
+unpruned GGUF is 466 GB; the smallest pruned one anybody has demonstrated is 319 GiB
+at 0.48 tok/s. Full reasoning in `kimi-k3-quants.md`.
 
-**Why the subagents are the interesting half:** NIM's free tier runs around 40 RPM and
-Kimi-K3 users report hitting 429 easily. One Hermes delegation batch can spend a whole
-minute's budget. Moving children onto a local endpoint is not a cost optimisation, it is
-what keeps the parent's requests available for the work you care about.
+**Why the subagents are the interesting half:** NIM's free tier runs around 40 RPM
+and Kimi-K3 users report 429s on NVIDIA's own developer forums. One Hermes delegation
+batch can spend a whole minute's budget. Moving children onto a different provider is
+not a cost optimisation — it is what keeps the parent's requests available for the
+work you care about.
+
+**Why not a local model for that tier.** An earlier version of this stack put the
+subagents on a local llama-server. That was wrong for any ordinary laptop, and the
+arithmetic says so plainly:
+
+| | |
+|---|---:|
+| TripleTrouble-V3 Q4_K_M weights | 21.2 GB |
+| KV cache at 32K context (GQA, 2 KV heads) | ~1.3 GB |
+| **resident total** | **~23 GB** |
+
+That is a 32 GB-unified Mac or a 24 GB card, not a normal machine. MoE helps with
+*speed* — only ~3.3B parameters activate per token, so it decodes like a 3B model —
+but it does nothing for the memory floor: every one of the 35B has to be reachable.
+
+The local tier was never the requirement. **Keeping children off the metered bucket
+was.** A second cloud provider does that with nothing on your machine, and the CI
+check now asserts the requirement (different provider, different host) rather than
+the old implementation detail (`127.0.0.1`).
+
+If you later want that tier on your own NVIDIA GPUs, NVIDIA ships a NIM container for
+it — `nvcr.io/nim/qwen/qwen3.6-35b-a3b`, with documented function calling, image and
+video input, and a DGX Spark (linux/arm64) build. Dedicated GPUs, no shared rate
+limit, still on the NVIDIA account.
 
 ## Step 1 — NVIDIA key
 
@@ -42,67 +69,56 @@ Never in `config.yaml`, never in a commit, never pasted into a chat window. The 
 reads it through `key_env`, and both `nim-preflight.sh` and CI check that no key-shaped
 string is tracked in this repo.
 
-## Step 2 — local TripleTrouble-V3
+## Step 2 — the other two keys
 
-`OliviaRossi/TripleTrouble-V3` is a merge of three Qwen 35B-A3B checkpoints —
-KAT-Coder-V2.5-Dev (40%), Ornith-1.5-35B-A3B (35%), Qwen-AgentWorld-35B-A3B (25%) — fused
-by normalized geodesic consensus with row-wise router calibration. 34.7B total, ~3.3B
-active per token, 256 routed experts top-8, 40 layers, 131,072 context, Apache 2.0.
-
-**Read this before you rely on it:** the model card publishes **no evaluation results at
-all.** Not one benchmark against any of its three parents. The merge mathematics are
-carefully described and the architecture claims are checkable, but "more capable" is not
-established by anything published. Treat it as an unvalidated merge and test it on your own
-work before trusting it with anything that matters. That is this repo's
-no-claim-without-evidence rule applied to a model instead of a pitch deck.
-
-### Which quant
-
-`mradermacher/TripleTrouble-V3-i1-GGUF` — imatrix quants, the best-supported repo of the
-three. Measured sizes:
-
-| quant | size | fits |
-|---|---:|---|
-| `i1-IQ4_XS` | 18.7 GB | 24 GB card with real KV headroom |
-| `i1-Q4_K_M` | **21.2 GB** | **the default. 32 GB+ VRAM, or unified memory** |
-| `i1-Q5_K_M` | 24.7 GB | 32 GB card |
-| `i1-Q6_K` | 28.5 GB | 48 GB, approaching diminishing returns |
-| `i1-IQ2_M` | 11.7 GB | 16 GB card, real quality cost |
-| `i1-IQ1_S` | 7.5 GB | a curiosity, not a working agent |
-
-Take **`i1-Q4_K_M`** unless memory forces otherwise. It is a merge already — stacking
-aggressive quantization on top of merge drift compounds two sources of damage that nobody
-has measured together.
-
-**On RTX 50-series / RTX PRO 6000 Blackwell (sm_120), prefer the K-quants.** The
-`iq1_s`/`iq2_s`/`iq3_s` tensor types have broken CUDA matmuls on sm_120 and **silently
-produce garbage** rather than failing — documented by the author of
-`prometheusAIR/Kimi-K3-REAP55-GGUF`, who built that model specifically to avoid them. It is
-a property of the tensor types, not of any one model, so it applies here too.
+Neither is required to start; each one enables a tier.
 
 ```bash
-hf download mradermacher/TripleTrouble-V3-i1-GGUF \
-    TripleTrouble-V3.i1-Q4_K_M.gguf --local-dir ~/models
+# subagent tier — https://huggingface.co/settings/tokens
+printf 'HF_TOKEN=%s\n' 'hf_…' >> ~/.hermes/.env
 
-llama-server -m ~/models/TripleTrouble-V3.i1-Q4_K_M.gguf \
-    --port 8090 --host 127.0.0.1 -ngl 99 -c 131072 --jinja \
-    --temp 0.3 --top-p 0.90
+# 429 fallback — https://openrouter.ai/keys
+printf 'OPENROUTER_API_KEY=%s\n' 'sk-or-v1-…' >> ~/.hermes/.env
 ```
 
-`--jinja` matters: without it the chat template is not applied and tool calls do not form.
-Temperature 0.3 / top-p 0.90 is the card's own recommendation for tool calling and MCP
-agents, which is what Hermes subagents do. For code synthesis it suggests 0.2 / 0.85; for
-open-ended reasoning 0.6 / 0.92.
+`scripts/nim-preflight.sh` checks all three and warns — rather than failing — when a
+secondary key is absent, because running NIM-only is a legitimate choice. What it
+will not let pass quietly is a tier that is *configured but unreachable*: that is the
+case where Hermes falls back onto whatever still answers, which is NIM, and the rate
+limit you were avoiding arrives with nothing in the transcript to explain it.
 
-vLLM instead, if you have the VRAM for unquantized:
+### The two models
 
-```bash
-vllm serve OliviaRossi/TripleTrouble-V3 \
-    --port 8090 --tensor-parallel-size 2 --max-model-len 32768 \
-    --gpu-memory-utilization 0.90 --trust-remote-code
-```
+Both **Apache-2.0** — free weights, commercial use, modify and ship, no licence fee.
+Both MoE, both natively multimodal, both tool-calling. They are not redundant copies;
+failing over between them is a trade:
 
-Single 80 GB card: add `--quantization fp8`.
+| | Qwen3.6-35B-A3B | Qwen3.5-122B-A10B |
+|---|---:|---:|
+| total / active | 36B / **3B** | 125B / 10B |
+| SWE-bench Verified | **73.4** | 72.0 |
+| Terminal-Bench 2 | **51.5** | 49.4 |
+| BFCL-V4 (tool use) | — | **72.2** |
+| MMMU-Pro (vision) | — | **76.9** |
+| context | 262K | 262K |
+| downloads | 27.9M | 7.0M |
+
+For scale on those: Claude Sonnet 4.5 scores 62.0 on SWE-bench Verified and 75.0 on
+MMMU-Pro; GPT-5 mini scores 55.5 on BFCL-V4 against the 122B's 72.2.
+
+The 35B is the better coder and the cheaper one to run. The 122B is the better
+tool-caller and the better vision model. That is why the 35B carries the subagents
+and the 122B catches the parent's 429s — each tier gets the model suited to it.
+
+**One caveat on 73.4.** Alibaba measured it with their own agent scaffold, not the
+standard public harness. DeepSeek published a scaffold comparison showing the harness
+alone is worth ~9 points on DeepSWE with identical weights, so that digit is not
+directly comparable to other labs' published SWE-bench numbers. Strong model;
+vendor-measured number.
+
+**Pinning a provider.** `Qwen/Qwen3.6-35B-A3B` lets HF route for you.
+`Qwen/Qwen3.6-35B-A3B:featherless-ai` or `:scaleway` pin a specific one — both are
+live — and `:fastest` routes on latency.
 
 ## Step 3 — wire Hermes
 
@@ -114,8 +130,9 @@ scripts/nim-preflight.sh
 
 The preflight is the point. It proves the key authenticates, proves `moonshotai/kimi-k3` is
 in the catalog *this key* can see, proves a completion comes back, probes whether tool
-calling works, reports any rate-limit headers, and checks the local endpoint is up. It
-never prints the key.
+calling works, reports any rate-limit headers, and checks that the other two buckets
+answer. It never prints any key. `--nim-only` skips the secondary checks; `--list`
+prints every model your NVIDIA key can reach.
 
 ### Trap 1 — traffic that does not reach NVIDIA
 
@@ -131,16 +148,27 @@ headers for a third-party relay and tells you to rotate the key if it finds one.
 
 ### Trap 2 — subagents on the metered endpoint
 
-If `delegation.base_url` is unset, children inherit the parent's provider and every one of
-them spends a NIM request. The config pins them to `127.0.0.1` and gives them
-`fallback_providers: []`, so a local outage fails loudly instead of quietly draining the
-rate limit. CI asserts both.
+If `delegation` is unset, children inherit the parent's provider and every one of
+them spends a NIM request.
+
+The config routes them by **provider name** (`provider: "custom:hf-router"`), not by
+`delegation.base_url`. That is deliberate: the `base_url` path takes an inline
+`api_key` and otherwise falls back to `OPENAI_API_KEY` only — there is no `key_env`
+for it — so using it would mean pasting a token into a tracked file or having
+children authenticate as the wrong account. Naming the provider resolves its
+`key_env` instead.
+
+`fallback_providers: []` under `delegation` denies children any chain back onto NIM.
+CI asserts all of it, and its failure paths are exercised: subagents on NIM, a
+fallback chain restored, an inline key added, or two providers collapsed onto one
+host each make the check exit 1.
 
 ### Switching models mid-session
 
 ```
 /model custom:nvidia-nim:moonshotai/kimi-k3
-/model custom:tripletrouble:TripleTrouble-V3
+/model custom:hf-router:Qwen/Qwen3.6-35B-A3B
+/model custom:openrouter:qwen/qwen3.5-122b-a10b
 ```
 
 Note the triple syntax has had bugs of its own

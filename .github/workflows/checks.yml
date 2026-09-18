@@ -86,14 +86,35 @@ jobs:
               "the NIM provider must point at NVIDIA's endpoint"
           assert providers["nvidia-nim"]["key_env"] == "NVIDIA_API_KEY", \
               "the NIM key must come from the environment, never from this file"
-          assert "api_key" not in providers["nvidia-nim"], \
-              "no inline key on the NIM provider"
 
-          # Subagents must not reach the metered endpoint. That split is the whole
-          # point of the config; a regression here quietly burns the rate limit.
+          # Subagents must not reach the metered endpoint, and must not be able to
+          # fall back onto it. That separation is the whole point of the config; a
+          # regression here quietly burns the NIM rate limit with no visible symptom.
+          #
+          # The invariant is "a different rate-limit bucket from the parent" — NOT
+          # "local". An earlier revision asserted 127.0.0.1, which encoded the
+          # implementation (a local llama-server) rather than the requirement, and
+          # would have blocked the cloud-only layout this now uses.
           deleg = d["delegation"]
-          assert "127.0.0.1" in deleg["base_url"], "subagents must stay local"
-          assert deleg["fallback_providers"] == [], "subagents must have no cloud fallback"
+          parent_provider = d["model"]["provider"]
+          assert deleg.get("provider"), "subagents must name a provider"
+          assert deleg["provider"] != parent_provider, \
+              "subagents must not share the parent's provider"
+          assert "nvidia-nim" not in deleg["provider"], \
+              "subagents must not run on the metered NIM bucket"
+          assert deleg["fallback_providers"] == [], \
+              "subagents must have no fallback chain back onto NIM"
+
+          # Every provider authenticates from the environment. One inline key here
+          # would be committed, and the repo's own rule is that secrets never are.
+          for name, prov in providers.items():
+              assert "key_env" in prov, f"{name} must authenticate via key_env"
+              assert "api_key" not in prov, f"{name} must not carry an inline key"
+
+          # Three distinct hosts, or the whole point is lost.
+          from urllib.parse import urlparse
+          hosts = {urlparse(p_["api"]).netloc for p_ in providers.values()}
+          assert len(hosts) == len(providers), f"providers share a host: {hosts}"
 
           # Match the key SHAPE, not the bare prefix. The config names the prefix in a
           # comment on purpose, to show where the key goes; matching that would fail
@@ -104,7 +125,8 @@ jobs:
 
           print("hermes config: OK")
           print("  primary   ", d["model"]["provider"], d["model"]["default"])
-          print("  subagents ", deleg["base_url"], deleg["model"])
+          print("  subagents ", deleg["provider"], deleg["model"])
+          print("  buckets   ", ", ".join(sorted(hosts)))
           PY
 
       - name: Canonical numbers agree with CLAUDE.md
