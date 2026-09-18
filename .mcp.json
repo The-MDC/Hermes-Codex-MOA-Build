@@ -46,6 +46,13 @@
     "crawl4ai": {
       "type": "sse",
       "url": "http://127.0.0.1:11235/mcp/sse"
+    },
+    "atomicmemory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@atomicmemory/mcp-server"
+      ]
     }
   }
 }
