@@ -317,7 +317,7 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
     else
         warn "local server not reachable (HTTP $CODE) — no offline floor"
         printf '        Start one:  llama-server -m Hermes-4-14B-Q6_K.gguf --port 8080 --jinja\n'
-        printf '        See docs/models/local-flash-model.md. Everything else still works.\n'
+        printf '        See docs/models/local-floor.md. Everything else still works.\n'
     fi
 
     # --------------------------------------------------------- web browsing --

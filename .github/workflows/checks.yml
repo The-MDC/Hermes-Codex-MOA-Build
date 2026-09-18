@@ -169,6 +169,24 @@ jobs:
                 "models, pinned;", len(excluded), "built-ins excluded")
           PY
 
+      # A doc reference that points at a file which does not exist is the same class
+      # of silent failure as a hook pointing at a missing script: nothing errors, the
+      # reader just follows a dead pointer. One shipped in this PR before this gate
+      # existed — the preflight told people to read local-flash-model.md, which was
+      # never the filename.
+      - name: Doc references resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          dead=0; checked=0
+          while IFS= read -r ref; do
+            checked=$((checked+1))
+            [ -f "$ref" ] || { echo "DEAD: $ref"; dead=$((dead+1)); }
+          done < <(grep -rhoE 'docs/[a-zA-Z0-9/_-]+\.md' docs scripts SETUP.md configs .github 2>/dev/null | sort -u)
+          echo "checked $checked doc reference(s)"
+          [ "$checked" -gt 0 ] || { echo "found none — the grep is broken"; exit 1; }
+          [ "$dead" -eq 0 ] || exit 1
+
       - name: Canonical numbers agree with CLAUDE.md
         shell: bash
         run: |
