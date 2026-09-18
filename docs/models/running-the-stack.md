@@ -163,12 +163,42 @@ CI asserts all of it, and its failure paths are exercised: subagents on NIM, a
 fallback chain restored, an inline key added, or two providers collapsed onto one
 host each make the check exit 1.
 
+### Keeping the picker to four models
+
+Two separate sources of clutter, two separate fixes.
+
+**Live discovery.** Every provider sets `discover_models: false`. Without it Hermes
+probes each endpoint's `/models` — the HF router and OpenRouter each return hundreds —
+and **a `models:` list alone does not whitelist**: Hermes reads that list as
+context-length overrides and probes anyway. That surprise is the whole reason the flag
+exists, and CI now asserts it on every provider.
+
+**Hermes' built-in provider catalog**, which surfaces independently of anything
+configured here. `excluded_providers` hides those.
+
+There is a trap in combining them. The exclusion matches case-insensitively against
+*every key a provider can surface under*, so an entry of ours named `openrouter` would
+be hidden by the exclusion aimed at the **built-in** openrouter. Ours is therefore called
+**`or-fallback`**, and CI asserts no provider name collides with its own exclusion list.
+
+Result: `hermes model` shows exactly four entries.
+
+| tier | provider | model |
+|---|---|---|
+| parent | `nvidia-nim` | `moonshotai/kimi-k3` |
+| subagents | `hf-router` | `Qwen/Qwen3.6-35B-A3B` |
+| fallback | `or-fallback` | `qwen/qwen3.5-122b-a10b` |
+| floor | `local` | `Hermes-4-14B` |
+
+To add one back, add it to that provider's `models:` — not by re-enabling discovery,
+which returns you to hundreds.
+
 ### Switching models mid-session
 
 ```
 /model custom:nvidia-nim:moonshotai/kimi-k3
 /model custom:hf-router:Qwen/Qwen3.6-35B-A3B
-/model custom:openrouter:qwen/qwen3.5-122b-a10b
+/model custom:or-fallback:qwen/qwen3.5-122b-a10b
 ```
 
 Note the triple syntax has had bugs of its own

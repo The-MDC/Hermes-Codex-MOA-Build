@@ -130,6 +130,22 @@ jobs:
           hosts = {urlparse(p_["api"]).netloc for p_ in providers.values()}
           assert len(hosts) == len(providers), f"providers share a host: {hosts}"
 
+          # The picker must stay pinned. `discover_models` defaults to TRUE, and a
+          # `models:` list alone does not whitelist — Hermes reads that as context-length
+          # overrides and still probes /models. Drop this flag and the HF router and
+          # OpenRouter each pour hundreds of entries back into the picker.
+          for name, prov in providers.items():
+              assert prov.get("discover_models") is False, \
+                  f"{name} must set discover_models: false or the picker unpins"
+              assert prov.get("models"), f"{name} must list its models explicitly"
+
+          # excluded_providers matches case-insensitively against every key a provider
+          # surfaces under, so a provider here NAMED like a built-in would hide itself.
+          # That is why the OpenRouter entry is called or-fallback.
+          excluded = {e.lower() for e in d.get("excluded_providers", [])}
+          clash = excluded & {n.lower() for n in providers}
+          assert not clash, f"provider name collides with its own exclusion: {clash}"
+
           # The research browser must not silently bill an API. Hermes' auto-detection
           # prefers Firecrawl over SearXNG whenever FIRECRAWL_API_KEY is merely present
           # in the environment, so the search backend has to be named explicitly.
@@ -149,6 +165,8 @@ jobs:
           print("  subagents ", deleg["provider"], deleg["model"])
           print("  buckets   ", ", ".join(sorted(hosts)))
           print("  web       ", web.get("search_backend"), "+", web.get("extract_backend"))
+          print("  picker    ", len([m for p_ in providers.values() for m in p_["models"]]),
+                "models, pinned;", len(excluded), "built-ins excluded")
           PY
 
       - name: Canonical numbers agree with CLAUDE.md

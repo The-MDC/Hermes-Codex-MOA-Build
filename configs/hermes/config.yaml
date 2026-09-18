@@ -82,6 +82,10 @@ providers:
     default_model: moonshotai/kimi-k3
     models:
       - moonshotai/kimi-k3
+    # Pin the picker to the line above. Without this Hermes live-probes the
+    # endpoint's /models and a `models:` list alone does NOT whitelist — the
+    # HF router and OpenRouter each return hundreds.
+    discover_models: false
     # Kimi-K3's architectural maximum is 1,048,576. NIM serves a smaller window than
     # that; nim-preflight.sh reports what the endpoint advertises. Set this to the
     # number it prints, not to the architectural one — overstating it makes Hermes
@@ -106,12 +110,16 @@ providers:
     default_model: Qwen/Qwen3.6-35B-A3B
     models:
       - Qwen/Qwen3.6-35B-A3B
+    # Pin the picker to the line above. Without this Hermes live-probes the
+    # endpoint's /models and a `models:` list alone does NOT whitelist — the
+    # HF router and OpenRouter each return hundreds.
+    discover_models: false
     # 36B total, 3B active. SWE-bench Verified 73.4%, Terminal-Bench 2.0 51.5%,
     # Apache-2.0, native image + video. The 73.4 was measured on Alibaba's own agent
     # scaffold rather than the public harness, so treat the digit as vendor-reported.
     context_length: 262144
 
-  openrouter:
+  or-fallback:
     name: "OpenRouter"
     api: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
@@ -123,6 +131,10 @@ providers:
     default_model: qwen/qwen3.5-122b-a10b
     models:
       - qwen/qwen3.5-122b-a10b
+    # Pin the picker to the line above. Without this Hermes live-probes the
+    # endpoint's /models and a `models:` list alone does NOT whitelist — the
+    # HF router and OpenRouter each return hundreds.
+    discover_models: false
     context_length: 262144
 
   local:
@@ -138,6 +150,10 @@ providers:
     default_model: Hermes-4-14B
     models:
       - Hermes-4-14B
+    # Pin the picker to the line above. Without this Hermes live-probes the
+    # endpoint's /models and a `models:` list alone does NOT whitelist — the
+    # HF router and OpenRouter each return hundreds.
+    discover_models: false
     # KV cache is what actually hurts on a laptop, not the weights, so this is set far
     # below the model's native window on purpose. Raise it only as far as RAM tolerates.
     context_length: 32768
@@ -220,3 +236,43 @@ delegation:
 web:
   search_backend: searxng
   extract_backend: firecrawl
+
+# ---------------------------------------------------------------------------
+# KEEPING THE PICKER CLEAN
+#
+# Two separate sources of clutter, and they need two separate fixes.
+#
+# 1. Live discovery. Each provider above sets `discover_models: false`, so the picker
+#    shows the one model configured on that entry rather than everything the endpoint
+#    advertises. Listing `models:` alone does not do this — Hermes treats that list as
+#    context-length overrides and still probes.
+#
+# 2. Hermes' own built-in provider catalog, which surfaces independently of anything
+#    configured here. `excluded_providers` hides those.
+#
+# Note `openrouter` in the list below and `or-fallback:` above. The exclusion matches
+# case-insensitively against every key a provider can surface under, so had our entry
+# kept the name `openrouter` this line would have hidden our own fallback tier along
+# with the built-in. Renaming ours is what makes the exclusion safe.
+#
+# Switching mid-session, with the names as they now stand:
+#   /model custom:nvidia-nim:moonshotai/kimi-k3
+#   /model custom:hf-router:Qwen/Qwen3.6-35B-A3B
+#   /model custom:or-fallback:qwen/qwen3.5-122b-a10b
+#   /model custom:local:Hermes-4-14B
+# ---------------------------------------------------------------------------
+excluded_providers:
+  - openrouter
+  - anthropic
+  - openai
+  - copilot
+  - google
+  - mistral
+  - deepseek
+  - groq
+  - cerebras
+  - xai
+  - minimax
+  - ollama
+  - lmstudio
+  - nous
