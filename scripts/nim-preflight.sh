@@ -50,6 +50,8 @@ NIM_BASE="${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
 NIM_MODEL="${NVIDIA_NIM_MODEL:-moonshotai/kimi-k3}"
 HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
+LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:8080/v1}"
+SEARXNG="${SEARXNG_URL:-}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -291,6 +293,52 @@ if [ "$NIM_ONLY" = "0" ]; then
 
     if [ "$HF_BASE" = "$NIM_BASE" ] || [ "$OR_BASE" = "$NIM_BASE" ]; then
         bad "a secondary bucket points at the NIM endpoint — they are not independent"
+    fi
+
+    # ---------------------------------------------------------- local floor --
+    #
+    # The one tier nothing can rate-limit. Absent is fine — it is a floor, not a
+    # dependency — so this warns rather than fails.
+    hdr "local floor — Hermes-4-14B ($LOCAL_BASE)"
+    CODE=$(curl -sS -o "$TMP/local.json" -w '%{http_code}' --max-time 5 \
+        "$LOCAL_BASE/models" 2>/dev/null) || CODE="000"
+    if [ "$CODE" = "200" ]; then
+        ok "local server is up — the session survives losing the network"
+        if command -v python3 >/dev/null 2>&1; then
+            python3 -c 'import json,sys
+d = json.load(open(sys.argv[1])).get("data", [])
+for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/null \
+            | while IFS= read -r l; do
+                [ "$QUIET" = 1 ] || printf '  %s      %s%s\n' "$DIM" "$l" "$RST"
+              done
+        fi
+    else
+        warn "local server not reachable (HTTP $CODE) — no offline floor"
+        printf '        Start one:  llama-server -m Hermes-4-14B-Q6_K.gguf --port 8080 --jinja\n'
+        printf '        See docs/models/local-flash-model.md. Everything else still works.\n'
+    fi
+
+    # --------------------------------------------------------- web browsing --
+    #
+    # Hermes prefers Firecrawl over SearXNG whenever FIRECRAWL_API_KEY merely exists
+    # in the environment. The config names searxng to stop that, but the URL still
+    # has to resolve or the named backend is a backend that is not there.
+    hdr "research browser"
+    if [ -z "$SEARXNG" ]; then
+        warn "SEARXNG_URL not set — config names searxng but nothing is listening"
+        printf '        docker run -d -p 8888:8080 --name searxng searxng/searxng\n'
+        printf '        then SEARXNG_URL=http://127.0.0.1:8888 in ~/.hermes/.env\n'
+        printf '        Without it Hermes falls to DDGS (keyless, weaker) or errors.\n'
+    else
+        CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 \
+            "$SEARXNG/search?q=test&format=json" 2>/dev/null) || CODE="000"
+        case "$CODE" in
+            200) ok "SearXNG answers JSON at $SEARXNG" ;;
+            403) bad "SearXNG returned 403 — the JSON API is disabled on that instance"
+                 printf '        Add `- json` under `search.formats` in its settings.yml.\n' ;;
+            000) bad "SearXNG unreachable at $SEARXNG" ;;
+            *)   warn "SearXNG returned HTTP $CODE at $SEARXNG" ;;
+        esac
     fi
 fi
 
