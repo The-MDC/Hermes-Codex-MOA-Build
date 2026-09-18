@@ -49,9 +49,10 @@
 # for, on a Qwen3-14B base. Sizes (bartowski imatrix GGUFs):
 #
 #   IQ4_XS   8.11 GB     16 GB machine, leaves room for KV and everything else
-#   Q4_K_M   9.00 GB     the default if you have 16 GB and little else running
+#   Q4_K_M   9.00 GB     16 GB with little else running
 #   Q5_K_M  10.51 GB     24 GB machine
-#   Q6_K    12.12 GB     32 GB machine; past here returns diminish fast
+#   Q6_K    12.12 GB  <- chosen. At 14B, quantization damage is proportionally worse
+#                        than on a large model; this buys the least of it short of Q8.
 #
 # Hermes-4.3-36B is newer and stronger but its Q4_K_M is 21.76 GB — the same class as
 # the local model that already did not fit. Not an option on a laptop.

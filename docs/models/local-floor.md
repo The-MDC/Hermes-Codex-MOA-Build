@@ -26,18 +26,22 @@ Sizes from `bartowski/NousResearch_Hermes-4-14B-GGUF` (imatrix, best-maintained)
 | `IQ4_NL` | 8.54 GB | non-I-quant CUDA fallback |
 | `Q4_K_M` | **9.00 GB** | the default on 16 GB |
 | `Q5_K_M` | 10.51 GB | 24 GB |
-| `Q6_K` | **12.12 GB** | 32 GB; past here returns diminish fast |
+| `Q6_K` | **12.12 GB** | **← the pick.** 32 GB; past here returns diminish fast |
 | `Q8_0` | 15.70 GB | only if RAM is free and you want it |
+
+**Q6_K is the choice here** — at 14B, quantization damage is proportionally worse than
+on a large model, and 12.12 GB buys the least of it short of Q8. It is also a K-quant,
+which sidesteps the next paragraph entirely.
 
 **On RTX 50-series / RTX PRO 6000 (sm_120), avoid `IQ2_*`/`IQ3_*`** — those tensor types
 have broken CUDA matmuls there and *silently emit garbage* rather than failing. `IQ4_XS`
-is outside that set, but `Q4_K_M` is the safer choice on that hardware.
+is outside that set; `Q6_K` is not affected at all.
 
 ```bash
 hf download bartowski/NousResearch_Hermes-4-14B-GGUF \
-    NousResearch_Hermes-4-14B-Q4_K_M.gguf --local-dir ~/models
+    NousResearch_Hermes-4-14B-Q6_K.gguf --local-dir ~/models
 
-llama-server -m ~/models/NousResearch_Hermes-4-14B-Q4_K_M.gguf \
+llama-server -m ~/models/NousResearch_Hermes-4-14B-Q6_K.gguf \
     --port 8080 --host 127.0.0.1 -ngl 99 -c 32768 --jinja
 ```
 
@@ -49,6 +53,11 @@ never form. That is the single most common way this tier appears broken.
 **`NousResearch/Hermes-4.3-36B`** (Nov 2025) is newer and stronger — and its official
 Q4_K_M is **21.76 GB**, the same class as the local model that already did not fit. The
 official GGUF ladder runs 17.62 GB (Q3_K_M) to 38.42 GB (Q8_0). Not a laptop model.
+
+Its `Q3_K_M` at 17.62 GB would technically fit a 32 GB machine, and it is the wrong
+trade: a 36B squeezed to 3 bits against a 14B at 6 bits. The smaller model at the higher
+quant will behave better and leave you headroom. Revisit only if you move to a workstation
+where `Q5_K_M` (25.59 GB) is comfortable.
 
 **`Edge0/Edge0-35B-A3B-preview`** is a genuinely clever piece of work — a 35B MoE running
 in **under 3 GiB of active memory** at 15 tok/s by streaming experts from SSD, within 3.9
