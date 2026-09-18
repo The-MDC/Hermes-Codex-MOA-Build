@@ -20,9 +20,10 @@
 # THE KEY IS NEVER PRINTED, and never written anywhere. It is read from the
 # environment only. If it is absent this fails rather than prompting for it.
 #
-# usage: scripts/nim-preflight.sh [--quiet] [--skip-local] [--list]
+# usage: scripts/nim-preflight.sh [--quiet] [--nim-only] [--list]
 #        --list also prints every model id this key can reach, which is the same
 #        catalog as build.nvidia.com/explore/discover but scoped to your account.
+#        --nim-only skips the other two buckets (see below).
 # exits: 0 = the route is usable, 1 = something is broken
 
 set -u
@@ -30,12 +31,12 @@ set -u
 RED=$'\033[31m'; GRN=$'\033[32m'; YLW=$'\033[33m'; DIM=$'\033[2m'; RST=$'\033[0m'
 [ -t 1 ] || { RED=""; GRN=""; YLW=""; DIM=""; RST=""; }
 
-FAILED=0; WARNED=0; QUIET=0; SKIP_LOCAL=0; LIST=0
+FAILED=0; WARNED=0; QUIET=0; NIM_ONLY=0; LIST=0
 for arg in "$@"; do
     case "$arg" in
-        --quiet)      QUIET=1 ;;
-        --skip-local) SKIP_LOCAL=1 ;;
-        --list)       LIST=1 ;;
+        --quiet)     QUIET=1 ;;
+        --nim-only)  NIM_ONLY=1 ;;
+        --list)      LIST=1 ;;
         *) printf 'unknown argument: %s\n' "$arg" >&2; exit 2 ;;
     esac
 done
@@ -47,7 +48,8 @@ hdr()  { [ "$QUIET" = 1 ] || printf '\n%s%s%s\n' "$DIM" "$*" "$RST"; }
 
 NIM_BASE="${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
 NIM_MODEL="${NVIDIA_NIM_MODEL:-moonshotai/kimi-k3}"
-LOCAL_BASE="${TRIPLETROUBLE_BASE_URL:-http://127.0.0.1:8090/v1}"
+HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
+OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -253,18 +255,42 @@ else
     bad "tool-calling probe: HTTP $CODE"
 fi
 
-# --------------------------------------------------------------- local model --
-if [ "$SKIP_LOCAL" = "0" ]; then
-    hdr "local TripleTrouble-V3 ($LOCAL_BASE)"
-    CODE=$(curl -sS -o "$TMP/local.json" -w '%{http_code}' --max-time 10 \
-        "$LOCAL_BASE/models" 2>/dev/null) || CODE="000"
-    if [ "$CODE" = "200" ]; then
-        ok "local endpoint is up — delegation and the 429 fallback have somewhere to go"
-    else
-        warn "local endpoint not reachable (HTTP $CODE)"
-        printf '        Subagents and the rate-limit fallback both point here. Until it is up,\n'
-        printf '        every subagent spends NIM requests. Start llama-server or vLLM, or pass\n'
-        printf '        --skip-local if you meant to run cloud-only.\n'
+# ------------------------------------------------------------- other buckets --
+#
+# The parent runs on NIM. The subagent tier and the 429 fallback deliberately do
+# NOT — they sit on separate providers so a rate limit on one cannot starve the
+# others. That only holds if those providers actually answer, so check them here.
+#
+# A tier that is configured but unreachable is the quiet failure: Hermes falls back
+# onto whatever still works, which is NIM, and the rate limit you were avoiding
+# arrives anyway with nothing in the transcript to explain it.
+
+check_bucket() {   # name  base_url  key_value  purpose
+    local name="$1" base="$2" key="$3" purpose="$4"
+    if [ -z "$key" ]; then
+        warn "$name: no key set — $purpose has nowhere to go"
+        return
+    fi
+    local code
+    code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 \
+        -H "Authorization: Bearer $key" "$base/models" 2>/dev/null) || code="000"
+    case "$code" in
+        200)     ok "$name: reachable and the key authenticates" ;;
+        401|403) bad "$name: $code — key rejected. Not a retry case." ;;
+        000)     bad "$name: no response (network, DNS, or proxy)" ;;
+        *)       warn "$name: HTTP $code" ;;
+    esac
+}
+
+if [ "$NIM_ONLY" = "0" ]; then
+    hdr "subagent bucket — Hugging Face Inference ($HF_BASE)"
+    check_bucket "hf-router" "$HF_BASE" "${HF_TOKEN:-}" "the subagent tier"
+
+    hdr "fallback bucket — OpenRouter ($OR_BASE)"
+    check_bucket "openrouter" "$OR_BASE" "${OPENROUTER_API_KEY:-}" "the 429 fallback"
+
+    if [ "$HF_BASE" = "$NIM_BASE" ] || [ "$OR_BASE" = "$NIM_BASE" ]; then
+        bad "a secondary bucket points at the NIM endpoint — they are not independent"
     fi
 fi
 

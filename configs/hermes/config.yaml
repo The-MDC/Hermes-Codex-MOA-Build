@@ -1,33 +1,48 @@
-# Hermes Agent — Kimi-K3 via NVIDIA NIM, TripleTrouble-V3 local.
+# Hermes Agent — three providers on three independent rate-limit buckets.
 #
 # Copy to ~/.hermes/config.yaml (back up whatever is there first), then run
 #     scripts/nim-preflight.sh
 # before you trust it. The preflight proves the key works, proves traffic lands on
 # NVIDIA and not somewhere else, and reports what the endpoint actually supports.
 #
-# NO KEY GOES IN THIS FILE. Both providers read `key_env`. Put the key in
-# ~/.hermes/.env (chmod 600) or export it in your shell:
-#     NVIDIA_API_KEY=nvapi-...
-# Get it from https://build.nvidia.com — "Get API Key" on any model page. The same
-# key works for every model in the NIM catalog.
+# NO KEY GOES IN THIS FILE. Every provider reads `key_env`. Put them in
+# ~/.hermes/.env (chmod 600) or export them:
+#     NVIDIA_API_KEY=nvapi-...      https://build.nvidia.com  -> "Get API Key"
+#     HF_TOKEN=hf_...               https://huggingface.co/settings/tokens
+#     OPENROUTER_API_KEY=sk-or-v1-...   https://openrouter.ai/keys
+# Only NVIDIA_API_KEY is required; the other two each enable one tier below.
 #
 # ---------------------------------------------------------------------------
 # WHY THE SPLIT
 #
 # Kimi-K3 is 2.8T parameters. The smallest unpruned GGUF is 466 GB and the smallest
-# pruned one that anybody has shown working is 319 GiB at 0.48 tok/s. There is no
-# desktop build. It is an API model for you, and NVIDIA NIM is where your account
-# already is. See docs/models/kimi-k3-quants.md for the full survey.
-#
-# TripleTrouble-V3 is 34.7B total but only ~3.3B active per token, so it decodes like
-# a 3B dense model off a single card. That makes it the right thing to put underneath
-# the expensive model, not beside it.
+# pruned one anybody has shown working is 319 GiB at 0.48 tok/s. There is no desktop
+# build. It is an API model, and NVIDIA NIM is where the account already is. See
+# docs/models/kimi-k3-quants.md for the full survey.
 #
 # The binding constraint is not money, it is requests. NIM's free tier runs around
-# 40 RPM and Kimi-K3 users report hitting 429 easily. Hermes subagents fan out — a
-# single delegation batch can spend your whole minute. So: the parent reasons on
-# Kimi-K3 over NIM, and every subagent runs locally on TripleTrouble-V3, where
-# requests are free and unmetered. That is what `delegation:` below does.
+# 40 RPM and Kimi-K3 users report 429s on NVIDIA's own forums. Hermes subagents fan
+# out — a single delegation batch can spend the whole minute. So the parent reasons
+# on NIM and the subagents run somewhere else entirely.
+#
+# "Somewhere else" used to mean a local llama-server. It does not any more: hosting a
+# 35B-class model needs ~23 GB resident (21.2 GB of Q4_K_M weights plus KV), which is
+# a 32 GB-unified Mac or a 24 GB card, not a normal laptop. The local tier was never
+# the point — keeping children off the metered bucket was. A second *cloud* provider
+# does that job with nothing on your machine.
+#
+# So: three providers on three independent rate-limit buckets. A 429 on one does not
+# touch the others.
+#
+#   parent      NVIDIA NIM          Kimi-K3            reasoning, vision, 1M ctx
+#   subagents   HF Inference        Qwen3.6-35B-A3B    coding; 3B active, so cheap
+#   fallback    OpenRouter          Qwen3.5-122B-A10B  tool use + vision, if NIM 429s
+#
+# Both Qwen models are Apache-2.0: free weights, commercial use, no licence fee. If
+# you later want them on your own GPUs, NVIDIA ships a NIM container for the 35B —
+# nvcr.io/nim/qwen/qwen3.6-35b-a3b — with function calling and video input, and a
+# DGX Spark (arm64) build. That keeps everything on the NVIDIA account with no shared
+# rate limit. See docs/models/running-the-stack.md.
 # ---------------------------------------------------------------------------
 
 providers:
@@ -51,15 +66,37 @@ providers:
       # so drop to `high` if replies feel slow for the value.
       reasoning_effort: max
 
-  tripletrouble:
-    name: "TripleTrouble-V3 (local)"
-    # llama.cpp: llama-server --port 8090   → http://127.0.0.1:8090/v1
-    # vLLM:      vllm serve --port 8000     → http://127.0.0.1:8000/v1
-    api: http://127.0.0.1:8090/v1
-    api_key: "no-key-required"
+  hf-router:
+    name: "Hugging Face Inference Providers"
+    # OpenAI-compatible router in front of every HF inference provider. A separate
+    # rate-limit bucket from NIM, which is the entire reason it is here.
+    api: https://router.huggingface.co/v1
+    key_env: HF_TOKEN
     transport: chat_completions
-    default_model: TripleTrouble-V3
-    context_length: 131072
+    # Bare id lets HF pick the provider. Pin one by suffixing it —
+    # `Qwen/Qwen3.6-35B-A3B:featherless-ai` or `:scaleway` are both live — or use
+    # `:fastest` to let HF route on latency.
+    default_model: Qwen/Qwen3.6-35B-A3B
+    models:
+      - Qwen/Qwen3.6-35B-A3B
+    # 36B total, 3B active. SWE-bench Verified 73.4%, Terminal-Bench 2.0 51.5%,
+    # Apache-2.0, native image + video. The 73.4 was measured on Alibaba's own agent
+    # scaffold rather than the public harness, so treat the digit as vendor-reported.
+    context_length: 262144
+
+  openrouter:
+    name: "OpenRouter"
+    api: https://openrouter.ai/api/v1
+    key_env: OPENROUTER_API_KEY
+    transport: chat_completions
+    # Third bucket. Better tool use than the 35B (BFCL-V4 72.2 vs GPT-5 mini's 55.5)
+    # and better vision (MMMU-Pro 76.9, above Claude Sonnet 4.5's 75.0), at 10B active
+    # instead of 3B. Apache-2.0. Failing over to it is a trade, not a downgrade: you
+    # gain tool-calling and vision, you lose a little raw coding.
+    default_model: qwen/qwen3.5-122b-a10b
+    models:
+      - qwen/qwen3.5-122b-a10b
+    context_length: 262144
 
 model:
   # Named-provider form. If your Hermes build rejects `custom:<name>` here, leave
@@ -81,20 +118,22 @@ model:
   top_p: 1.0
 
 fallback_providers:
-  # When NIM returns 429 — and on a free tier it will — fall through to the local
-  # model rather than stopping. Slower and weaker, but the session survives.
+  # When NIM returns 429 — and on a free tier it will — fall through to a different
+  # provider rather than stopping. `key_env` keeps the key out of this file.
   - provider: custom
-    model: TripleTrouble-V3
-    base_url: http://127.0.0.1:8090/v1
-    api_key: "no-key-required"
+    model: qwen/qwen3.5-122b-a10b
+    base_url: https://openrouter.ai/api/v1
+    key_env: OPENROUTER_API_KEY
 
 delegation:
-  # Subagents run local. This is the whole point of the split — see WHY THE SPLIT.
-  base_url: http://127.0.0.1:8090/v1
-  api_key: "no-key-required"
-  model: TripleTrouble-V3
-  api_mode: chat_completions
+  # Subagents route by PROVIDER NAME, not by base_url. That matters: the documented
+  # `delegation.base_url` path takes an inline `api_key` and otherwise falls back to
+  # OPENAI_API_KEY only — there is no key_env for it — so using it would mean either
+  # pasting a token into this file or having children authenticate as the wrong
+  # account. Naming the provider resolves its key_env instead.
+  provider: "custom:hf-router"
+  model: Qwen/Qwen3.6-35B-A3B
   max_concurrent_children: 3
-  # Children are on a free local endpoint; give them no cloud fallback so a local
-  # outage fails loudly instead of quietly draining the NIM rate limit.
+  # Children have their own bucket already; giving them a chain back to NIM would
+  # reintroduce exactly the drain this split exists to prevent.
   fallback_providers: []

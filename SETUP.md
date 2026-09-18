@@ -89,18 +89,25 @@ Apply the relevant skill from .claude/skills/ before starting.
 
 ## Step 10: Local and NVIDIA inference (optional)
 
-Runs Hermes with Kimi-K3 on your NVIDIA NIM account and TripleTrouble-V3 on your own
-machine, with subagents kept off the metered endpoint.
+Runs Hermes with Kimi-K3 on your NVIDIA NIM account, and keeps subagents off that
+metered endpoint by putting them on a different provider. Nothing runs on your laptop.
 
 ```bash
 cp configs/hermes/config.yaml ~/.hermes/config.yaml   # back up yours first
-printf 'NVIDIA_API_KEY=%s\n' 'nvapi-…' >> ~/.hermes/.env && chmod 600 ~/.hermes/.env
-scripts/nim-preflight.sh          # proves the route before Hermes depends on it
-scripts/nim-preflight.sh --list   # every model your key can reach
+touch ~/.hermes/.env && chmod 600 ~/.hermes/.env
+printf 'NVIDIA_API_KEY=%s\n'     'nvapi-…'    >> ~/.hermes/.env   # required
+printf 'HF_TOKEN=%s\n'           'hf_…'       >> ~/.hermes/.env   # subagent tier
+printf 'OPENROUTER_API_KEY=%s\n' 'sk-or-v1-…' >> ~/.hermes/.env   # 429 fallback
+
+scripts/nim-preflight.sh          # proves all three buckets before Hermes needs them
+scripts/nim-preflight.sh --list   # every model your NVIDIA key can reach
 ```
 
-- `docs/models/running-the-stack.md` — install order, quant choice, the two traps,
-  and the NVIDIA AI Workbench path
+Only the NVIDIA key is required. The other two each enable one tier, and the preflight
+warns rather than fails when they are absent — NIM-only is a legitimate choice.
+
+- `docs/models/running-the-stack.md` — install order, the two model choices, the two
+  traps, and the NVIDIA AI Workbench path
 - `docs/models/kimi-k3-quants.md` — why Kimi-K3 is an API model and not a local one
 
 The key is read from the environment. It never goes in `config.yaml`, and both the
