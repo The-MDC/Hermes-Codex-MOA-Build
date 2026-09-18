@@ -1,0 +1,100 @@
+# Hermes Agent — Kimi-K3 via NVIDIA NIM, TripleTrouble-V3 local.
+#
+# Copy to ~/.hermes/config.yaml (back up whatever is there first), then run
+#     scripts/nim-preflight.sh
+# before you trust it. The preflight proves the key works, proves traffic lands on
+# NVIDIA and not somewhere else, and reports what the endpoint actually supports.
+#
+# NO KEY GOES IN THIS FILE. Both providers read `key_env`. Put the key in
+# ~/.hermes/.env (chmod 600) or export it in your shell:
+#     NVIDIA_API_KEY=nvapi-...
+# Get it from https://build.nvidia.com — "Get API Key" on any model page. The same
+# key works for every model in the NIM catalog.
+#
+# ---------------------------------------------------------------------------
+# WHY THE SPLIT
+#
+# Kimi-K3 is 2.8T parameters. The smallest unpruned GGUF is 466 GB and the smallest
+# pruned one that anybody has shown working is 319 GiB at 0.48 tok/s. There is no
+# desktop build. It is an API model for you, and NVIDIA NIM is where your account
+# already is. See docs/models/kimi-k3-quants.md for the full survey.
+#
+# TripleTrouble-V3 is 34.7B total but only ~3.3B active per token, so it decodes like
+# a 3B dense model off a single card. That makes it the right thing to put underneath
+# the expensive model, not beside it.
+#
+# The binding constraint is not money, it is requests. NIM's free tier runs around
+# 40 RPM and Kimi-K3 users report hitting 429 easily. Hermes subagents fan out — a
+# single delegation batch can spend your whole minute. So: the parent reasons on
+# Kimi-K3 over NIM, and every subagent runs locally on TripleTrouble-V3, where
+# requests are free and unmetered. That is what `delegation:` below does.
+# ---------------------------------------------------------------------------
+
+providers:
+
+  nvidia-nim:
+    name: "NVIDIA NIM (build.nvidia.com)"
+    api: https://integrate.api.nvidia.com/v1
+    key_env: NVIDIA_API_KEY
+    transport: chat_completions
+    default_model: moonshotai/kimi-k3
+    models:
+      - moonshotai/kimi-k3
+    # Kimi-K3's architectural maximum is 1,048,576. NIM serves a smaller window than
+    # that; nim-preflight.sh reports what the endpoint advertises. Set this to the
+    # number it prints, not to the architectural one — overstating it makes Hermes
+    # pack context it will get a 400 back for.
+    context_length: 131072
+    extra_body:
+      # Kimi-K3 is always-thinking. `max` is the model default; `low` and `high` cut
+      # the reasoning budget. On a 40 RPM tier the thinking tokens are your real cost,
+      # so drop to `high` if replies feel slow for the value.
+      reasoning_effort: max
+
+  tripletrouble:
+    name: "TripleTrouble-V3 (local)"
+    # llama.cpp: llama-server --port 8090   → http://127.0.0.1:8090/v1
+    # vLLM:      vllm serve --port 8000     → http://127.0.0.1:8000/v1
+    api: http://127.0.0.1:8090/v1
+    api_key: "no-key-required"
+    transport: chat_completions
+    default_model: TripleTrouble-V3
+    context_length: 131072
+
+model:
+  # Named-provider form. If your Hermes build rejects `custom:<name>` here, leave
+  # `provider: custom` + `base_url:` out entirely and select the provider once at
+  # runtime with:  /model custom:nvidia-nim:moonshotai/kimi-k3
+  #
+  # Do NOT write `provider: custom` with `base_url:` and `default: moonshotai/kimi-k3`
+  # together. `moonshotai/kimi-k3` is also an OpenRouter catalog slug, and Hermes has
+  # an open bug (NousResearch/hermes-agent#39753) where a model name matching the
+  # catalog overrides an explicit custom base_url and routes to OpenRouter instead —
+  # sending your NVIDIA key to a third party. The named-provider form routes by
+  # provider key rather than by model-name detection. nim-preflight.sh checks that
+  # the traffic actually landed on NVIDIA.
+  provider: "custom:nvidia-nim"
+  default: moonshotai/kimi-k3
+
+  # Moonshot's published sampling for K3. top_p 1.0 for agentic work, 0.95 single-step.
+  temperature: 1.0
+  top_p: 1.0
+
+fallback_providers:
+  # When NIM returns 429 — and on a free tier it will — fall through to the local
+  # model rather than stopping. Slower and weaker, but the session survives.
+  - provider: custom
+    model: TripleTrouble-V3
+    base_url: http://127.0.0.1:8090/v1
+    api_key: "no-key-required"
+
+delegation:
+  # Subagents run local. This is the whole point of the split — see WHY THE SPLIT.
+  base_url: http://127.0.0.1:8090/v1
+  api_key: "no-key-required"
+  model: TripleTrouble-V3
+  api_mode: chat_completions
+  max_concurrent_children: 3
+  # Children are on a free local endpoint; give them no cloud fallback so a local
+  # outage fails loudly instead of quietly draining the NIM rate limit.
+  fallback_providers: []

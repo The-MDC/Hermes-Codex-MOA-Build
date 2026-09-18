@@ -53,8 +53,59 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          bash -n scripts/madhats-doctor.sh
-          node --check scripts/check-canonical-numbers.js
+
+          # Enumerated by glob rather than by name so a script added later is covered
+          # without anyone remembering to edit this file. The counts are asserted
+          # below: a glob that silently matches nothing is a check that cannot fail.
+          sh_count=0
+          for f in scripts/*.sh; do
+            echo "bash -n $f"; bash -n "$f"; sh_count=$((sh_count+1))
+          done
+          js_count=0
+          for f in scripts/*.js; do
+            echo "node --check $f"; node --check "$f"; js_count=$((js_count+1))
+          done
+          [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
+          [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
+
+      # The Hermes config is data, not code: nothing in this repo executes it, so a
+      # syntax error would surface only on the desktop that copies it into
+      # ~/.hermes/config.yaml — where a malformed file makes Hermes fall back to its
+      # defaults rather than erroring, and the carefully-chosen routing silently does
+      # not apply. Parse it here instead.
+      - name: Hermes config parses, and routes where it claims to
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re, yaml
+          d = yaml.safe_load(open("configs/hermes/config.yaml"))
+
+          providers = d["providers"]
+          assert providers["nvidia-nim"]["api"] == "https://integrate.api.nvidia.com/v1", \
+              "the NIM provider must point at NVIDIA's endpoint"
+          assert providers["nvidia-nim"]["key_env"] == "NVIDIA_API_KEY", \
+              "the NIM key must come from the environment, never from this file"
+          assert "api_key" not in providers["nvidia-nim"], \
+              "no inline key on the NIM provider"
+
+          # Subagents must not reach the metered endpoint. That split is the whole
+          # point of the config; a regression here quietly burns the rate limit.
+          deleg = d["delegation"]
+          assert "127.0.0.1" in deleg["base_url"], "subagents must stay local"
+          assert deleg["fallback_providers"] == [], "subagents must have no cloud fallback"
+
+          # Match the key SHAPE, not the bare prefix. The config names the prefix in a
+          # comment on purpose, to show where the key goes; matching that would fail
+          # every run and teach people to ignore the check.
+          raw = open("configs/hermes/config.yaml").read()
+          leaked = re.findall(r"nvapi-[A-Za-z0-9_-]{20,}", raw)
+          assert not leaked, "config.yaml contains something shaped like a live NVIDIA key"
+
+          print("hermes config: OK")
+          print("  primary   ", d["model"]["provider"], d["model"]["default"])
+          print("  subagents ", deleg["base_url"], deleg["model"])
+          PY
 
       - name: Canonical numbers agree with CLAUDE.md
         shell: bash

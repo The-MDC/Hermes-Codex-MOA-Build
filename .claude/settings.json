@@ -1,4 +1,29 @@
 {
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/before-submit-prompt.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/after-mcp-execution.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
   "hookProfile": "standard",
   "disabledHooks": [],
   "modelPreferences": {
