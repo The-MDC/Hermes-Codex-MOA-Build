@@ -11,6 +11,7 @@
 #     HF_TOKEN=hf_...               https://huggingface.co/settings/tokens
 #     OPENROUTER_API_KEY=sk-or-v1-...   https://openrouter.ai/keys
 # Only NVIDIA_API_KEY is required; the other two each enable one tier below.
+# The local tier needs no key at all — it is a server on your own machine.
 #
 # ---------------------------------------------------------------------------
 # WHY THE SPLIT
@@ -37,6 +38,31 @@
 #   parent      NVIDIA NIM          Kimi-K3            reasoning, vision, 1M ctx
 #   subagents   HF Inference        Qwen3.6-35B-A3B    coding; 3B active, so cheap
 #   fallback    OpenRouter          Qwen3.5-122B-A10B  tool use + vision, if NIM 429s
+#   floor       your laptop         Hermes-4-14B       8.1-12.1 GB, no key, no limit
+#
+# THE LOCAL FLOOR is the one tier nothing can rate-limit, meter or take offline. The
+# three cloud tiers all fail the same way at once — no network.
+#
+# Hermes-4-14B is NousResearch's own model, from the people who build Hermes Agent, so
+# "optimized for Hermes" is literal rather than a claim: ChatML, function calling, tool
+# use, JSON mode, structured outputs and hybrid reasoning are what it was post-trained
+# for, on a Qwen3-14B base. Sizes (bartowski imatrix GGUFs):
+#
+#   IQ4_XS   8.11 GB     16 GB machine, leaves room for KV and everything else
+#   Q4_K_M   9.00 GB     the default if you have 16 GB and little else running
+#   Q5_K_M  10.51 GB     24 GB machine
+#   Q6_K    12.12 GB     32 GB machine; past here returns diminish fast
+#
+# Hermes-4.3-36B is newer and stronger but its Q4_K_M is 21.76 GB — the same class as
+# the local model that already did not fit. Not an option on a laptop.
+#
+# Too tight even at IQ4_XS? TokenRhythm/NeoHorse-1-4B is 2.71 GB at Q4_K_M and 4.48 GB
+# at Q8_0, Apache-2.0, purpose-built for agent harnesses: tau2-Bench 88.46 (best in its
+# 4B cohort), BFCL v4 61.79, IFBench 65.33. Swap the model and api lines below.
+#
+# None of these is a peer of the tiers above: 14B against 36B and 2.8T. Use the floor
+# when the others cannot be reached, or for narrow tool-calling where a big model is
+# waste.
 #
 # Both Qwen models are Apache-2.0: free weights, commercial use, no licence fee. If
 # you later want them on your own GPUs, NVIDIA ships a NIM container for the 35B —
@@ -98,6 +124,29 @@ providers:
       - qwen/qwen3.5-122b-a10b
     context_length: 262144
 
+  local:
+    name: "Hermes-4-14B (this machine)"
+    # llama.cpp: llama-server --port 8080  ->  http://127.0.0.1:8080/v1
+    # Ollama:    ollama serve              ->  http://127.0.0.1:11434/v1
+    api: http://127.0.0.1:8080/v1
+    # Loopback only. No key_env because there is no key: a server on your own machine
+    # authenticates nothing. The CI check that forbids inline keys exempts loopback
+    # hosts for exactly this reason — see .github/workflows/checks.yml.
+    api_key: "no-key-required"
+    transport: chat_completions
+    default_model: Hermes-4-14B
+    models:
+      - Hermes-4-14B
+    # KV cache is what actually hurts on a laptop, not the weights, so this is set far
+    # below the model's native window on purpose. Raise it only as far as RAM tolerates.
+    context_length: 32768
+    extra_body:
+      # Hermes 4 is hybrid-mode: it reasons only when asked. Leave thinking off for the
+      # tool-calling this tier exists to do — reasoning tokens are pure latency on a
+      # machine already decoding slowly, and tool calls do not benefit from them.
+      chat_template_kwargs:
+        thinking: false
+
 model:
   # Named-provider form. If your Hermes build rejects `custom:<name>` here, leave
   # `provider: custom` + `base_url:` out entirely and select the provider once at
@@ -124,6 +173,12 @@ fallback_providers:
     model: qwen/qwen3.5-122b-a10b
     base_url: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
+  # Last resort. Slower and much smaller than anything above it, but it is the only
+  # entry that survives losing the network, and nothing can rate-limit it.
+  - provider: custom
+    model: Hermes-4-14B
+    base_url: http://127.0.0.1:8080/v1
+    api_key: "no-key-required"
 
 delegation:
   # Subagents route by PROVIDER NAME, not by base_url. That matters: the documented
@@ -137,3 +192,30 @@ delegation:
   # Children have their own bucket already; giving them a chain back to NIM would
   # reintroduce exactly the drain this split exists to prevent.
   fallback_providers: []
+
+# ---------------------------------------------------------------------------
+# RESEARCH BROWSER
+#
+# Hermes already has one. `web_search` and `web_extract` are model-callable tools
+# with a provider registry, so this is configuration, not construction.
+#
+# SearXNG is the free half: self-hosted metasearch over 70+ engines, no API key, no
+# rate limit, and nothing about your queries leaves your machine except the queries
+# themselves. It is SEARCH-ONLY — it implements no extract or crawl — so it is paired
+# with Firecrawl, which does extraction well.
+#
+# Setting search_backend explicitly is load-bearing. Hermes' auto-detection walks a
+# priority ladder — Firecrawl > Parallel > Tavily > Exa > SearXNG > Brave > DDGS — so
+# merely having FIRECRAWL_API_KEY in the environment silently wins over SearXNG and
+# you never find out your "free local search" is billing an API. Naming the backend
+# stops that.
+#
+# Run one:  docker run -d -p 8888:8080 --name searxng searxng/searxng
+# Then:     SEARXNG_URL=http://127.0.0.1:8888   in ~/.hermes/.env
+#
+# With no SEARXNG_URL and no keys at all, Hermes falls to DDGS (DuckDuckGo, keyless).
+# Degraded, but the local model is not left without a browser.
+# ---------------------------------------------------------------------------
+web:
+  search_backend: searxng
+  extract_backend: firecrawl

@@ -105,16 +105,37 @@ jobs:
           assert deleg["fallback_providers"] == [], \
               "subagents must have no fallback chain back onto NIM"
 
-          # Every provider authenticates from the environment. One inline key here
-          # would be committed, and the repo's own rule is that secrets never are.
+          # Every REMOTE provider authenticates from the environment. One inline key
+          # here would be committed, and the repo's own rule is that secrets never are.
+          #
+          # Loopback is exempt, and the exemption is narrow on purpose: a server on
+          # your own machine authenticates nothing, so its "key" is a placeholder, not
+          # a secret. The exemption is keyed on the host actually resolving to
+          # loopback — not on the provider being *named* "local", which anyone could
+          # do to a remote endpoint and slip a real key past this check.
+          from urllib.parse import urlparse
+          LOOPBACK = {"127.0.0.1", "localhost", "::1", "[::1]"}
+          def is_loopback(url):
+              return (urlparse(url).hostname or "") in LOOPBACK
+
           for name, prov in providers.items():
+              if is_loopback(prov["api"]):
+                  assert "key_env" not in prov, \
+                      f"{name} is loopback and needs no key_env"
+                  continue
               assert "key_env" in prov, f"{name} must authenticate via key_env"
               assert "api_key" not in prov, f"{name} must not carry an inline key"
 
-          # Three distinct hosts, or the whole point is lost.
-          from urllib.parse import urlparse
+          # Distinct hosts, or the isolation the whole config exists for is lost.
           hosts = {urlparse(p_["api"]).netloc for p_ in providers.values()}
           assert len(hosts) == len(providers), f"providers share a host: {hosts}"
+
+          # The research browser must not silently bill an API. Hermes' auto-detection
+          # prefers Firecrawl over SearXNG whenever FIRECRAWL_API_KEY is merely present
+          # in the environment, so the search backend has to be named explicitly.
+          web = d.get("web", {})
+          assert web.get("search_backend") == "searxng", \
+              "web.search_backend must name searxng explicitly, not rely on auto-detect"
 
           # Match the key SHAPE, not the bare prefix. The config names the prefix in a
           # comment on purpose, to show where the key goes; matching that would fail
@@ -127,6 +148,7 @@ jobs:
           print("  primary   ", d["model"]["provider"], d["model"]["default"])
           print("  subagents ", deleg["provider"], deleg["model"])
           print("  buckets   ", ", ".join(sorted(hosts)))
+          print("  web       ", web.get("search_backend"), "+", web.get("extract_backend"))
           PY
 
       - name: Canonical numbers agree with CLAUDE.md

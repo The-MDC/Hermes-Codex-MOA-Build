@@ -109,6 +109,7 @@ warns rather than fails when they are absent — NIM-only is a legitimate choice
 - `docs/models/running-the-stack.md` — install order, the two model choices, the two
   traps, and the NVIDIA AI Workbench path
 - `docs/models/kimi-k3-quants.md` — why Kimi-K3 is an API model and not a local one
+- `docs/models/local-floor.md` — the offline tier (Hermes-4-14B) and the research browser
 
 The key is read from the environment. It never goes in `config.yaml`, and both the
 preflight and CI fail if anything key-shaped is committed.
