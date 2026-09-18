@@ -276,3 +276,33 @@ excluded_providers:
   - ollama
   - lmstudio
   - nous
+
+# ---------------------------------------------------------------------------
+# VOICE — jamiepine/hermes-voicebox
+#
+# TTS and STT providers written for Hermes specifically, MIT, and genuinely local:
+# one dependency (`requests`), zero credentials read, and every call in the package
+# goes to 127.0.0.1. Reviewed at 3e8c357 — the only external URL anywhere in it is a
+# docs link inside a skill file.
+#
+# IT IS A BRIDGE, NOT AN ENGINE. The plugin talks to the Voicebox app, which has to
+# be running locally — desktop build on :17493, Docker on :17600. Installing the
+# plugin on its own does nothing at all, which is the easiest way to be confused by
+# it. Override the endpoint with VOICEBOX_BASE_URL.
+#
+#   pip install hermes-voicebox        # into the env Hermes runs in
+#
+# Hermes auto-discovers it via the `hermes_agent.plugins` entry point on next start,
+# so there is nothing to register by hand.
+# ---------------------------------------------------------------------------
+tts:
+  provider: voicebox
+
+stt:
+  provider: voicebox
+
+mcp_servers:
+  # Optional: Voicebox's own MCP server, for agent-invoked voice tools rather than
+  # Hermes' tts/stt plumbing. Loopback, no key.
+  voicebox:
+    url: "http://127.0.0.1:17493/mcp"

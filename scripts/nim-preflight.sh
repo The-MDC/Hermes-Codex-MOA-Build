@@ -52,6 +52,7 @@ HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
 LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:8080/v1}"
 SEARXNG="${SEARXNG_URL:-}"
+VOICEBOX="${VOICEBOX_BASE_URL:-http://127.0.0.1:17493}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -340,6 +341,22 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
             *)   warn "SearXNG returned HTTP $CODE at $SEARXNG" ;;
         esac
     fi
+
+    # ------------------------------------------------------------------ voice --
+    #
+    # hermes-voicebox is a BRIDGE, not an engine: the plugin can be installed and
+    # configured correctly while doing nothing at all, because the Voicebox app it
+    # talks to is not running. That is the confusing failure, so name it.
+    hdr "voice — Voicebox ($VOICEBOX)"
+    CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+        "$VOICEBOX/health" 2>/dev/null) || CODE="000"
+    case "$CODE" in
+        200) ok "Voicebox is up — tts/stt providers have a backend" ;;
+        000) warn "Voicebox not reachable — tts/stt are configured but inert"
+             printf '        Start the desktop app, or Docker on :17600 and set\n'
+             printf '        VOICEBOX_BASE_URL. The plugin alone does nothing.\n' ;;
+        *)   warn "Voicebox returned HTTP $CODE at $VOICEBOX" ;;
+    esac
 fi
 
 # -------------------------------------------------------------------- verdict --

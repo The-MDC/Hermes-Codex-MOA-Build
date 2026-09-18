@@ -66,3 +66,44 @@ Crawl4AI for scraping — behind one MCP server, motivated by self-hosted Firecr
 search API not working. Worth reading if you'd rather run one container than two. Not
 installed here: the two-container split keeps each piece replaceable, and Hermes already
 drives SearXNG natively through `web.search_backend`.
+
+---
+
+# Voice: `jamiepine/hermes-voicebox`
+
+TTS and STT providers written for Hermes specifically. MIT, reviewed at `3e8c357`.
+
+```bash
+pip install hermes-voicebox     # into the env Hermes runs in
+```
+
+Hermes auto-discovers it through the `hermes_agent.plugins` entry point on next
+start — nothing to register by hand. The config sets `tts.provider` and
+`stt.provider` to `voicebox`.
+
+## What the review found
+
+| | |
+|---|---|
+| dependencies | `requests>=2.31`. That is the whole list |
+| credentials read | **none** — the single `os.environ.get` is `VOICEBOX_BASE_URL`, an endpoint override |
+| network reach | every call in the package goes to `127.0.0.1`; the only external URL anywhere is a docs link inside a skill file |
+| size / licence | 100 KB, MIT, with tests |
+
+The "fully local" claim verifies. That is worth stating plainly because it is the
+rare case where it does.
+
+## It is a bridge, not an engine
+
+The plugin does no inference. It talks to the **Voicebox app**, which has to be
+running: desktop build on `:17493`, Docker on `:17600`, override with
+`VOICEBOX_BASE_URL`.
+
+So the plugin can be installed, configured and discovered correctly while doing
+absolutely nothing — because the thing it bridges to isn't up. That is the confusing
+failure mode, and `scripts/nim-preflight.sh` now names it rather than leaving you to
+work it out from silence.
+
+It also ships its own skill at `hermes_voicebox/skills/voicebox/SKILL.md`, and
+Voicebox exposes an MCP server at `http://127.0.0.1:17493/mcp` for agent-invoked
+voice tools rather than Hermes' `tts`/`stt` plumbing. Both are wired.
