@@ -301,8 +301,210 @@ tts:
 stt:
   provider: voicebox
 
+# ---------------------------------------------------------------------------
+# MCP — CRITICAL ONLY, AND TOOL-FILTERED
+#
+# Hermes reads MCP servers from HERE, not from `.mcp.json` (that file is Claude
+# Code's). Until now this block held only voicebox, so Crawl4AI and AtomicMemory
+# were reachable from Claude Code and invisible to Hermes. Fixed below.
+#
+# Every entry is loopback or a local subprocess. No hosted company MCP belongs in
+# a Hermes build: supabase/github/alchemy/figma/gmail/drive/netlify are product
+# infrastructure, they each cost a round trip and a block of system prompt, and
+# `hermes import-agent claude-code` would happily drag all seven in. Don't.
+#
+# `tools.include` is the part that matters for throughput. Every MCP tool Hermes
+# discovers is injected into the system prompt on EVERY request. An unfiltered
+# server with 40 tools is a permanent tax on a 40 RPM budget. Name only what you
+# call. `hermes mcp configure <name>` reopens the checklist to widen it later.
+# ---------------------------------------------------------------------------
 mcp_servers:
-  # Optional: Voicebox's own MCP server, for agent-invoked voice tools rather than
-  # Hermes' tts/stt plumbing. Loopback, no key.
+  # Voicebox's own MCP server, for agent-invoked voice tools rather than Hermes'
+  # tts/stt plumbing. Loopback, no key.
   voicebox:
     url: "http://127.0.0.1:17493/mcp"
+    tools:
+      # Explicitly unfiltered. Voicebox has never been started in this environment,
+      # so its tool names are unknown here and a guessed include-list would filter
+      # everything out and silently break voice. Run it, then:
+      #     hermes mcp configure voicebox
+      # and replace this with the real list. The flag exists so CI can tell a
+      # reviewed opt-out from an unnoticed one.
+      unfiltered: true
+
+  # Self-hosted extraction. Pairs with `web.extract_backend` below: SearXNG
+  # searches, Crawl4AI reads. Keyless, loopback, and unlike Firecrawl it never
+  # leaves the machine.
+  crawl4ai:
+    url: "http://127.0.0.1:11235/mcp/sse"
+    tools:
+      include:
+        - crawl
+        - scrape
+
+  # Cross-session recall. Reviewed: telemetryCollection is declared, defaulted
+  # and never read — it gates no network call.
+  atomicmemory:
+    command: "npx"
+    args: ["-y", "@atomicmemory/mcp-server"]
+    tools:
+      include:
+        - store_memory
+        - search_memory
+        - list_memories
+
+# ---------------------------------------------------------------------------
+# THROUGHPUT — everything below exists to buy requests, not to save money
+#
+# This config's own header states the binding constraint: "not money, it is
+# requests." NIM's free tier runs around 40 RPM. Every block here is chosen
+# against that, and two of them are deliberately the OPPOSITE of the setting you
+# would pick if tokens were the scarce resource.
+# ---------------------------------------------------------------------------
+
+# execute_code — the single largest win available.
+#
+# The agent writes a Python script that calls Hermes tools over an RPC socket.
+# Intermediate tool results NEVER enter the context window; only the script's
+# final print() comes back. A search -> extract -> filter -> summarise pipeline
+# that costs four inference round trips collapses into ONE.
+#
+# On a request-limited tier that is the difference between a research task
+# costing 4 RPM and costing 1.
+#
+# `project` mode runs in the session's working directory with the active venv, so
+# `import pandas` and relative paths behave exactly as they do in terminal().
+# `strict` quarantines to a temp dir with Hermes' own interpreter — more
+# reproducible, less useful. Security is identical either way: credentials are
+# scrubbed, and scripts cannot call execute_code recursively, delegate_task, or
+# any MCP tool.
+# AUXILIARY MODELS — the largest single win across all three constraints.
+#
+# Hermes has TWO kinds of model slot. The main model is what it thinks with.
+# Auxiliary models are eleven side-jobs it offloads: context compression, vision,
+# web-page summarisation, approval scoring, MCP tool routing, session titles,
+# skill search, curator review, and the Kanban trio.
+#
+# EVERY auxiliary slot defaults to `auto`, and `auto` means "use the main model."
+#
+# So without this block, Kimi-K3 — 2.8 trillion parameters, always-thinking, at
+# reasoning_effort: max — is what generates your session titles. Hermes' own docs
+# are blunt about it: "When you're burning reasoning tokens on Opus/M2.7 just to
+# summarize context. A fast chat model does the job at 1/50th the cost."
+#
+# Moving these to the HF router tier pays on all three axes at once:
+#
+#   money    — summarisation and titling stop being billed at frontier reasoning
+#              rates. Qwen3.6-35B-A3B activates 3B parameters per token.
+#   requests — and this is the part that is easy to miss: `auto` sends auxiliary
+#              calls to NIM, so they spend the SAME ~40 RPM bucket as your actual
+#              conversation. A compression pass and a title generation were
+#              competing with you for the scarce resource. Naming a different
+#              provider moves them onto a different bucket entirely.
+#   tokens   — unchanged in count, but a reasoning model emits thinking tokens
+#              while summarising, which a chat model does not. Fewer tokens for
+#              identical output.
+#
+# Left on `auto` deliberately: vision (Kimi-K3 has it and the 35B's is weaker) and
+# the three Kanban slots (unused here — no board configured).
+auxiliary:
+  compression:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+  web_extract:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+  title_generation:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+    prefer_fast_model: true
+  approval:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+  mcp:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+  skills_hub:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+  curator:
+    provider: "custom:hf-router"
+    model: Qwen/Qwen3.6-35B-A3B
+
+code_execution:
+  mode: project
+  timeout: 300
+  max_tool_calls: 50
+
+# Compression — threshold RAISED, which is the counter-intuitive half.
+#
+# Default is 0.50: compact once the context passes half the window. Raising it
+# wins on ALL THREE constraints at once, which is why it is worth the paragraph:
+#
+#   requests — every compaction is itself an inference call
+#   money    — compaction REWRITES history, so it invalidates the provider prompt
+#              cache. The next request re-reads the whole conversation at full
+#              input price instead of the cached rate, which Hermes' own docs put
+#              at a 75-90% discount. A compaction therefore costs a request AND a
+#              full-price re-read of everything it just summarised.
+#   tokens   — the re-read above is the single largest token event in a session
+#
+# The naive reading is "compact early to save tokens." It is wrong: compacting
+# early spends a request and destroys the cache to shrink a context that was
+# being billed at a tenth of the price.
+#
+# Kimi-K3 is always-thinking at reasoning_effort: max, so its context climbs fast
+# and would trip a 0.50 gate repeatedly in a normal session. 0.70 on a 131k window
+# is ~92k tokens before the first compaction — still far short of overflow, and
+# roughly halves how often we pay a request to summarise.
+#
+# Do NOT raise it much further. Provider-proven overflow costs a rejected request
+# plus a bounded recovery pass, which is worse than the compaction it avoided.
+compression:
+  enabled: true
+  threshold: 0.50          # global default, unchanged
+  model_thresholds:
+    "kimi-k3": 0.70        # substring match, longest key wins
+  target_ratio: 0.20
+  tail_mode: lean
+  protect_last_n: 20
+
+context:
+  engine: "compressor"     # built-in. Pinned so a plugin cannot silently take over.
+
+# Credential pools — same-provider key rotation, and the strategy choice matters.
+#
+# A pool registers several keys for ONE provider and rotates on 429/402/401
+# instead of failing over to a different provider. Pools are tried BEFORE
+# fallback_providers, so a second NVIDIA key keeps Kimi-K3 serving where today a
+# 429 drops us to Qwen on OpenRouter. This is the direct fix for the 40 RPM cap.
+#
+# Custom endpoints are pooled under the name in the `providers:` dict above:
+#     hermes auth add nvidia-nim --api-key nvapi-<second key>
+#     hermes auth list
+#
+# STRATEGY: fill_first, deliberately — NOT round_robin.
+#
+# Provider prompt caches are scoped per API key. Rotating keys mid-session throws
+# the cached prefix away and the next request re-reads the whole conversation at
+# undiscounted input price. round_robin rotates on EVERY selection, so it would
+# pay that penalty constantly. Kimi-K3 carries a large always-thinking prefix, so
+# that penalty is at its worst here. fill_first uses one key until it is genuinely
+# exhausted — one cache reset per exhaustion, not one per request.
+credential_pool_strategies:
+  nvidia-nim: fill_first
+  hf-router: fill_first
+  or-fallback: fill_first
+
+# Provider routing — OpenRouter ONLY. It has no effect on NIM, HF or the local
+# floor, so it shapes exactly one tier: `or-fallback`, the 429 escape hatch.
+#
+# We reach that tier because the parent is rate-limited, which means the thing we
+# want from it is a fast answer, not the cheapest one. sort: throughput, and
+# require_parameters so a reseller that silently drops `tools` or `temperature`
+# is never selected — a fallback that quietly loses tool-calling is worse than
+# the 429 it replaced.
+provider_routing:
+  sort: "throughput"
+  require_parameters: true
+  data_collection: "deny"
