@@ -160,11 +160,80 @@ jobs:
           leaked = re.findall(r"nvapi-[A-Za-z0-9_-]{20,}", raw)
           assert not leaked, "config.yaml contains something shaped like a live NVIDIA key"
 
+          # MCP servers reach the model on EVERY request: each one's tools are
+          # injected into the system prompt. Two invariants, both about throughput
+          # as much as trust.
+          #
+          # 1. Loopback or local subprocess only. `hermes import-agent claude-code`
+          #    migrates .mcp.json wholesale, which would drag seven hosted company
+          #    MCPs (supabase, github, alchemy, figma, gmail, drive, netlify) into
+          #    a personal agent build. Each is a round trip and a block of prompt.
+          # 2. Every server names its tools. An unfiltered server injects its whole
+          #    catalogue forever; on a 40 RPM tier that is a permanent tax.
+          mcp = d.get("mcp_servers", {}) or {}
+          for name, srv in mcp.items():
+              if "url" in srv:
+                  host = urlparse(srv["url"]).hostname or ""
+                  assert host in LOOPBACK, \
+                      f"mcp_servers.{name} points off-box at {host} — Hermes MCPs must be loopback"
+              else:
+                  assert srv.get("command"), \
+                      f"mcp_servers.{name} has neither a loopback url nor a command"
+              tools = srv.get("tools") or {}
+              assert tools.get("include") or tools.get("unfiltered") is True, \
+                  f"mcp_servers.{name} must either name its tools via tools.include or " \
+                  f"declare tools.unfiltered: true — silence is how a server's whole " \
+                  f"catalogue ends up in every request unnoticed"
+
+          # Auxiliary slots default to `auto`, and `auto` means "use the main model".
+          # Left alone, a 2.8T always-thinking model writes your session titles and
+          # spends the same 40 RPM bucket as the conversation. The point of the block
+          # is that these do NOT resolve to the parent provider.
+          aux = d.get("auxiliary", {}) or {}
+          assert aux, "auxiliary: is missing — every side-job would run on the main model"
+          for task, cfg in aux.items():
+              prov = cfg.get("provider", "auto")
+              assert prov != "auto", \
+                  f"auxiliary.{task} is on auto, which routes it to the main model and the parent bucket"
+              assert prov != parent_provider, \
+                  f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
+              assert cfg.get("model"), f"auxiliary.{task} names a provider but no model"
+
+          # The throughput block. These are deliberate, counter-intuitive choices;
+          # a well-meaning edit back to the defaults would quietly undo them.
+          ce = d.get("code_execution", {})
+          assert ce.get("mode") in ("project", "strict"), \
+              "code_execution.mode must be set — it collapses multi-call pipelines into one request"
+
+          comp = d.get("compression", {})
+          kimi = (comp.get("model_thresholds") or {}).get("kimi-k3")
+          assert kimi is not None and kimi > comp.get("threshold", 0.50), \
+              "kimi-k3 compression threshold must be RAISED above the global default: " \
+              "each compaction is itself a request, and requests are the scarce resource here"
+          assert kimi <= 0.80, \
+              "kimi-k3 threshold above 0.80 risks provider-proven overflow, which costs " \
+              "a rejected request plus recovery — worse than the compaction it avoids"
+
+          # Rotating a credential pool discards the provider-side prompt cache, and
+          # Kimi-K3 carries a large always-thinking prefix. round_robin would pay
+          # that on every selection.
+          pools = d.get("credential_pool_strategies", {})
+          for pname, strat in pools.items():
+              assert strat == "fill_first", \
+                  f"credential_pool_strategies.{pname} is {strat}: only fill_first preserves " \
+                  f"the prompt cache between rotations"
+
           print("hermes config: OK")
           print("  primary   ", d["model"]["provider"], d["model"]["default"])
           print("  subagents ", deleg["provider"], deleg["model"])
           print("  buckets   ", ", ".join(sorted(hosts)))
           print("  web       ", web.get("search_backend"), "+", web.get("extract_backend"))
+          print("  mcp       ", len(mcp), "server(s), all loopback/local, all tool-filtered")
+          print("  auxiliary ", len(aux), "slot(s) off the parent bucket ->",
+                sorted({c["provider"] for c in aux.values()}))
+          print("  throughput", "execute_code:" + str(ce.get("mode")),
+                "| kimi compress@" + str(kimi),
+                "| pools:" + ",".join(sorted(pools)))
           print("  picker    ", len([m for p_ in providers.values() for m in p_["models"]]),
                 "models, pinned;", len(excluded), "built-ins excluded")
           PY
