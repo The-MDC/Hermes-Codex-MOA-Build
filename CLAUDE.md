@@ -100,10 +100,18 @@ All slash commands in `.claude/commands/`:
 7. Apply security review skill before any smart contract changes
 8. Apply verification-loop skill for all investor-facing documents
 
-## Hooks Active (ECC)
-- session-start.js — loads context, initializes memory
-- session-end.js — saves session summary, extracts learnings
-- pre-compact.js — preserves critical context before token compression
-- before-submit-prompt.js — validates prompt quality
-- after-mcp-execution.js — logs MCP tool results
-- stop.js — final session checkpoint
+## Hooks Active
+Wired in `.claude/settings.json` — the only file Claude Code reads hooks from.
+`scripts/madhats-doctor.sh` fails if any of these points at a missing script.
+
+- before-submit-prompt.js — `UserPromptSubmit` — secret scanning on the prompt
+- after-mcp-execution.js — `PostToolUse` / `mcp__.*` — MCP result logging
+- post-edit-check.js — `PostToolUse` / `Write|Edit` — console.log warning, Prettier, `tsc --noEmit`
+- pre-bash-guard.js — `PreToolUse` / `Bash` — blocks `--no-verify` git hook bypass (the only blocking hook)
+- stop-audit.js — `Stop` — console.log sweep across changed files
+
+**Not active**: `session-start.js`, `session-end.js`, `pre-compact.js` and `stop.js`
+are unwired forwarders to Cursor hooks that were never in this repo — they do nothing.
+`.claude/hooks/hooks.json` was a Cursor config (Cursor event names, `.cursor/` paths
+that never existed) and has been removed; Claude Code never read it. See
+`.claude/hooks/README.md`.

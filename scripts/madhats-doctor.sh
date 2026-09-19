@@ -74,48 +74,61 @@ RULE_COUNT=$(find .claude/rules -type f 2>/dev/null | wc -l | tr -d ' ')
 
 # The check this script exists for: a hook whose command points at a file that is
 # not there never runs, and never says so.
+#
+# Claude Code reads hooks from .claude/settings.json. It does NOT read
+# .claude/hooks/hooks.json — that was a Cursor config (Cursor event names such as
+# `afterFileEdit`, paths under a `.cursor/` directory that never existed here) and
+# was removed. If it reappears, say so, because nothing will ever execute it.
 if [ -f .claude/hooks/hooks.json ]; then
-    if node -e 'JSON.parse(require("fs").readFileSync(".claude/hooks/hooks.json","utf8"))' 2>/dev/null; then
-        ok ".claude/hooks/hooks.json: valid JSON"
-    else
-        bad ".claude/hooks/hooks.json: INVALID JSON"
-    fi
+    warn ".claude/hooks/hooks.json is back — Claude Code never reads it; hooks belong in .claude/settings.json"
+fi
 
-    MISSING_HOOKS=$(node - <<'NODE'
+if [ -f .claude/settings.json ]; then
+    HOOK_REPORT=$(node - <<'NODE'
 const fs = require('fs');
 let cfg;
-try { cfg = JSON.parse(fs.readFileSync('.claude/hooks/hooks.json', 'utf8')); }
+try { cfg = JSON.parse(fs.readFileSync('.claude/settings.json', 'utf8')); }
 catch { process.exit(0); }
 const missing = [];
-const walk = (node) => {
-  if (Array.isArray(node)) return node.forEach(walk);
-  if (node && typeof node === 'object') {
-    if (typeof node.command === 'string') {
-      // Only local script references are checkable; `npx foo` is resolved at run time.
-      const m = node.command.match(/(?:^|\s)((?:\.\/)?[\w.\-/]+\.(?:js|mjs|cjs|sh|py))(?:\s|$)/);
-      if (m && !fs.existsSync(m[1])) missing.push(m[1]);
+let checked = 0, wired = 0;
+for (const [event, entries] of Object.entries(cfg.hooks || {})) {
+  for (const entry of (entries || [])) {
+    for (const h of (entry.hooks || [])) {
+      wired++;
+      if (h.type !== 'command' || typeof h.command !== 'string') continue;
+      // Pull a local script path out of the command. $CLAUDE_PROJECT_DIR resolves
+      // to the repo root at run time, so strip it and test relative to cwd.
+      const m = h.command.match(/["']?\$(?:\{)?CLAUDE_PROJECT_DIR\}?\/([\w.\-\/]+\.(?:js|mjs|cjs|sh|py))["']?/)
+             || h.command.match(/(?:^|\s)["']?((?:\.\/)?[\w.\-\/]+\.(?:js|mjs|cjs|sh|py))["']?(?:\s|$)/);
+      if (!m) continue;               // `npx foo` etc. resolve at run time
+      checked++;
+      if (!fs.existsSync(m[1])) missing.push(`${event}: ${m[1]}`);
     }
-    Object.values(node).forEach(walk);
   }
-};
-walk(cfg);
-console.log([...new Set(missing)].join('\n'));
+}
+console.log(JSON.stringify({ missing, checked, wired }));
 NODE
 )
-    if [ -n "$MISSING_HOOKS" ]; then
-        COUNT=$(printf '%s\n' "$MISSING_HOOKS" | grep -c . )
-        bad "hooks.json references $COUNT script(s) that do not exist — these hooks silently never run:"
-        printf '%s\n' "$MISSING_HOOKS" | while IFS= read -r p; do
-            [ -n "$p" ] && printf '          %s\n' "$p"
-        done
-        HOOK_DIR_HINT=$(printf '%s\n' "$MISSING_HOOKS" | head -1 | sed 's#/[^/]*$##')
-        printf '        %shint: hook scripts present in .claude/hooks/ — referenced path is %s%s\n' \
-            "$DIM" "${HOOK_DIR_HINT:-?}" "$RST"
-    else
-        ok "hooks.json: every referenced script resolves"
+    if [ -n "$HOOK_REPORT" ]; then
+        HK_WIRED=$(printf '%s' "$HOOK_REPORT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).wired))')
+        HK_CHECKED=$(printf '%s' "$HOOK_REPORT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).checked))')
+        HK_MISSING=$(printf '%s' "$HOOK_REPORT" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).missing.join("\n")))')
+        if [ -n "$HK_MISSING" ]; then
+            COUNT=$(printf '%s\n' "$HK_MISSING" | grep -c . )
+            bad "settings.json wires $COUNT hook script(s) that do not exist — these silently never run:"
+            printf '%s\n' "$HK_MISSING" | while IFS= read -r p; do
+                [ -n "$p" ] && printf '          %s\n' "$p"
+            done
+        elif [ "${HK_CHECKED:-0}" -eq 0 ]; then
+            # A pass with nothing examined is not a pass. This repo has been bitten
+            # by gates that scanned zero files; say so rather than printing green.
+            warn "settings.json: $HK_WIRED hook(s) wired but none reference a local script — nothing to verify"
+        else
+            ok "settings.json: $HK_WIRED hook(s) wired, $HK_CHECKED local script(s) all resolve"
+        fi
     fi
 else
-    warn ".claude/hooks/hooks.json not found"
+    warn ".claude/settings.json not found — no hooks are configured at all"
 fi
 
 if [ -f .mcp.json ]; then
