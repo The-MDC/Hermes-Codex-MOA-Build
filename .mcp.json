@@ -3,42 +3,56 @@
     "supabase": {
       "type": "url",
       "url": "https://mcp.supabase.com/mcp",
-      "description": "Supabase DB access — MADHATs platform database"
+      "description": "Supabase DB access \u2014 MADHATs platform database"
     },
     "github": {
       "type": "url",
       "url": "https://mcp.github.com/mcp",
-      "description": "GitHub — The-MDC org access"
+      "description": "GitHub \u2014 The-MDC org access"
     },
     "alchemy": {
       "type": "url",
       "url": "https://mcp.alchemy.com/mcp",
-      "description": "Alchemy MCP — blockchain data, NFT APIs, AA-SDK"
+      "description": "Alchemy MCP \u2014 blockchain data, NFT APIs, AA-SDK"
     },
     "figma": {
       "type": "url",
       "url": "https://mcp.figma.com/mcp",
-      "description": "Figma — design assets, mockups"
+      "description": "Figma \u2014 design assets, mockups"
     },
     "gmail": {
       "type": "url",
       "url": "https://gmail.mcp.claude.com/mcp",
-      "description": "Gmail — investor and partner email"
+      "description": "Gmail \u2014 investor and partner email"
     },
     "google-drive": {
       "type": "url",
       "url": "https://drive.mcp.claude.com/mcp",
-      "description": "Google Drive — shared docs and decks"
+      "description": "Google Drive \u2014 shared docs and decks"
     },
     "netlify": {
       "type": "url",
       "url": "https://netlify-mcp.netlify.app/mcp",
-      "description": "Netlify — deployment and hosting"
+      "description": "Netlify \u2014 deployment and hosting"
     },
     "hermes": {
       "command": "hermes",
-      "args": ["mcp", "serve"],
-      "description": "Hermes Agent — messaging bridge across 30+ platforms (stdio, requires hermes on PATH)"
+      "args": [
+        "mcp",
+        "serve"
+      ],
+      "description": "Hermes Agent \u2014 messaging bridge across 30+ platforms (stdio, requires hermes on PATH)"
+    },
+    "crawl4ai": {
+      "type": "sse",
+      "url": "http://127.0.0.1:11235/mcp/sse"
+    },
+    "atomicmemory": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@atomicmemory/mcp-server"
+      ]
     }
   }
 }

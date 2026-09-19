@@ -52,6 +52,8 @@ HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
 LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:8080/v1}"
 SEARXNG="${SEARXNG_URL:-}"
+VOICEBOX="${VOICEBOX_BASE_URL:-http://127.0.0.1:17493}"
+ATOMICMEM="${ATOMICMEMORY_API_URL:-http://127.0.0.1:17350}"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -315,7 +317,7 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
     else
         warn "local server not reachable (HTTP $CODE) — no offline floor"
         printf '        Start one:  llama-server -m Hermes-4-14B-Q6_K.gguf --port 8080 --jinja\n'
-        printf '        See docs/models/local-flash-model.md. Everything else still works.\n'
+        printf '        See docs/models/local-floor.md. Everything else still works.\n'
     fi
 
     # --------------------------------------------------------- web browsing --
@@ -340,6 +342,37 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
             *)   warn "SearXNG returned HTTP $CODE at $SEARXNG" ;;
         esac
     fi
+
+    # ------------------------------------------------------------------ voice --
+    #
+    # hermes-voicebox is a BRIDGE, not an engine: the plugin can be installed and
+    # configured correctly while doing nothing at all, because the Voicebox app it
+    # talks to is not running. That is the confusing failure, so name it.
+    hdr "voice — Voicebox ($VOICEBOX)"
+    CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+        "$VOICEBOX/health" 2>/dev/null) || CODE="000"
+    case "$CODE" in
+        200) ok "Voicebox is up — tts/stt providers have a backend" ;;
+        000) warn "Voicebox not reachable — tts/stt are configured but inert"
+             printf '        Start the desktop app, or Docker on :17600 and set\n'
+             printf '        VOICEBOX_BASE_URL. The plugin alone does nothing.\n' ;;
+        *)   warn "Voicebox returned HTTP $CODE at $VOICEBOX" ;;
+    esac
+
+    # ----------------------------------------------------------------- memory --
+    #
+    # Same shape as Voicebox: the MCP server is a client to a local core. Configured
+    # and inert looks identical to absent from the agent's side.
+    hdr "memory — AtomicMemory core ($ATOMICMEM)"
+    CODE=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 5 \
+        "$ATOMICMEM/health" 2>/dev/null) || CODE="000"
+    case "$CODE" in
+        200) ok "AtomicMemory core is up — the memory tools have a backend" ;;
+        000) warn "AtomicMemory core not reachable — memory tools will fail on call"
+             printf '        The MCP server is a client, not the store. Start the core,\n'
+             printf '        or set ATOMICMEMORY_API_URL. No key needed for the local one.\n' ;;
+        *)   warn "AtomicMemory core returned HTTP $CODE at $ATOMICMEM" ;;
+    esac
 fi
 
 # -------------------------------------------------------------------- verdict --
