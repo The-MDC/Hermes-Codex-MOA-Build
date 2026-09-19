@@ -78,7 +78,7 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
-          import re, yaml
+          import os, re, tomllib, yaml
           d = yaml.safe_load(open("configs/hermes/config.yaml"))
 
           providers = d["providers"]
@@ -145,6 +145,15 @@ jobs:
           excluded = {e.lower() for e in d.get("excluded_providers", [])}
           clash = excluded & {n.lower() for n in providers}
           assert not clash, f"provider name collides with its own exclusion: {clash}"
+
+          # Codex is a DELEGATE (subprocess, via the bundled `codex` skill), never a
+          # 5th inference provider. Hermes' own `openai-codex` provider and the Codex
+          # CLI read separate token files against the SAME ChatGPT 5-hour usage
+          # window; turning the provider on makes that window's spend invisible to
+          # itself. See docs/models/codex-handoff.md.
+          assert "openai-codex" in excluded, \
+              "openai-codex must stay in excluded_providers — Codex is delegated to, " \
+              "never wired as a model provider (docs/models/codex-handoff.md)"
 
           # The research browser must not silently bill an API. Hermes' auto-detection
           # prefers Firecrawl over SearXNG whenever FIRECRAWL_API_KEY is merely present
@@ -223,6 +232,22 @@ jobs:
                   f"credential_pool_strategies.{pname} is {strat}: only fill_first preserves " \
                   f"the prompt cache between rotations"
 
+          # If the Codex CLI config template exists, it must not quietly open a
+          # second, custom inference route — that is the same mistake as wiring
+          # openai-codex above, one file over. Optional: this repo works without
+          # ever having adopted Codex at all.
+          codex_toml = "configs/codex/config.toml"
+          codex_forbidden = set()
+          if os.path.exists(codex_toml):
+              with open(codex_toml, "rb") as f:
+                  codex_cfg = tomllib.load(f)
+              codex_forbidden = {"model_provider", "model_providers", "openai_base_url",
+                                  "chatgpt_base_url"} & set(codex_cfg)
+              assert not codex_forbidden, \
+                  f"{codex_toml} sets {codex_forbidden} — Codex must keep its own " \
+                  f"default OpenAI routing, never a silent custom provider " \
+                  f"(docs/models/codex-handoff.md)"
+
           print("hermes config: OK")
           print("  primary   ", d["model"]["provider"], d["model"]["default"])
           print("  subagents ", deleg["provider"], deleg["model"])
@@ -236,6 +261,9 @@ jobs:
                 "| pools:" + ",".join(sorted(pools)))
           print("  picker    ", len([m for p_ in providers.values() for m in p_["models"]]),
                 "models, pinned;", len(excluded), "built-ins excluded")
+          print("  codex     ", "openai-codex excluded as a provider; delegated via "
+                "subprocess" + (" | configs/codex/config.toml: no custom route"
+                if os.path.exists(codex_toml) else " | configs/codex/config.toml: absent"))
           PY
 
       # A doc reference that points at a file which does not exist is the same class

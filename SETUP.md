@@ -114,6 +114,23 @@ warns rather than fails when they are absent — NIM-only is a legitimate choice
 The key is read from the environment. It never goes in `config.yaml`, and both the
 preflight and CI fail if anything key-shaped is committed.
 
+## Step 11: Codex delegate (optional)
+
+Lets Hermes hand off bounded, git-repo-scoped coding tasks to the Codex CLI as a
+subprocess — implement/fix/refactor loops, `codex review`, parallel worktree fan-out.
+Nothing to port: the bundled `autonomous-ai-agents/codex` skill ships with Hermes.
+
+```bash
+npm install -g @openai/codex     # or: brew install --cask codex
+codex login                      # browser OAuth against your ChatGPT plan
+cp configs/codex/config.toml ~/.codex/config.toml   # back up yours first
+```
+
+Full design — why this is a delegate and never a 5th Hermes model provider, the two
+credential paths that must not both be on, and the exact invocation pattern — is in
+`docs/models/codex-handoff.md`. CI asserts the two configs stay consistent with each
+other on this point.
+
 ## Folder Reference
 ```
 MADHATs-Cowork/
@@ -135,7 +152,8 @@ MADHATs-Cowork/
 │   └── outreach/                ← VC + partner email templates
 ├── OUTPUTS/                     ← All Claude-generated files land here
 ├── configs/
-│   └── hermes/config.yaml       ← Hermes model routing (NIM + local)
+│   ├── hermes/config.yaml       ← Hermes model routing (NIM + local)
+│   └── codex/config.toml        ← Codex CLI defaults for delegated coding tasks
 ├── docs/models/                 ← quant survey, stack setup
 ├── scripts/                     ← doctor, canonical-numbers, NIM preflight
 └── .claude/

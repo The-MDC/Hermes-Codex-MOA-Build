@@ -1,0 +1,55 @@
+# Codex CLI — defaults for work Hermes DELEGATES to it.
+#
+# Copy to ~/.codex/config.toml (back up whatever is there first):
+#     cp configs/codex/config.toml ~/.codex/config.toml
+#
+# Full design and the two mistakes this corrects: docs/models/codex-handoff.md
+#
+# ---------------------------------------------------------------------------
+# WHAT THIS FILE DELIBERATELY DOES NOT SET
+#
+# No `model`, no `model_provider`, no `[model_providers.*]`, no `openai_base_url`,
+# no `chatgpt_base_url`. Codex keeps its own default model and its own OpenAI
+# routing. This is a decision, not an oversight — see "Two touchpoints, one
+# path" in codex-handoff.md. Hermes already has a four-model picker fought for
+# in configs/hermes/config.yaml; a second, silent inference route through
+# Codex would reopen exactly that problem and — because Hermes' `openai-codex`
+# provider and the Codex CLI read two DIFFERENT token files
+# (~/.hermes/auth.json vs ~/.codex/auth.json) against the SAME ChatGPT 5-hour
+# usage window — create an invisible second consumer of one quota. CI asserts
+# these keys stay absent from this file.
+# ---------------------------------------------------------------------------
+
+# Delegation means not babysitting approval prompts turn by turn. The safety
+# layer is process discipline instead (see the invocation pattern in
+# codex-handoff.md: clean git status before, targeted diff after, tests
+# in between) — not an approval dialog Hermes has no human to answer.
+approval_policy = "never"
+
+# workspace-write, NOT danger-full-access, as the default. Escalating to
+# danger-full-access is sometimes REQUIRED when Codex runs under a Hermes
+# gateway/service context — its own sandbox nests badly inside one bubblewrap
+# jail already running — but that escalation belongs at the call site
+# (`codex exec --sandbox danger-full-access ...`), decided deliberately per
+# task, not defaulted here for every invocation.
+sandbox_mode = "workspace-write"
+
+# Off by default. A delegated coding task rarely needs the network, and
+# leaving it off is one less thing a runaway prompt could do. Flip per
+# project (not here) if a task genuinely needs `npm install` mid-run:
+#   [sandbox_workspace_write]
+#   network_access = true
+[sandbox_workspace_write]
+network_access = false
+
+# Matches Kimi-K3's `reasoning_effort: max` on the Hermes side of this repo's
+# config: a delegated coding task should get Codex's best reasoning, not its
+# fastest. Codex has its own separate rate limit (the ChatGPT 5-hour window,
+# or metered API billing) from anything in configs/hermes/config.yaml — see
+# "Money, requests, tokens" in codex-handoff.md.
+model_reasoning_effort = "high"
+
+# OS keychain over a plaintext token file where the OS offers one. `auto`
+# picks the best available and falls back to `file` (~/.codex/auth.json)
+# only where no keychain exists (e.g. this repo's own CI containers).
+cli_auth_credentials_store = "auto"
