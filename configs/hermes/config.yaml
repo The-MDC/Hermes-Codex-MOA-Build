@@ -255,6 +255,14 @@ web:
 # kept the name `openrouter` this line would have hidden our own fallback tier along
 # with the built-in. Renaming ours is what makes the exclusion safe.
 #
+# `openai-codex` is excluded for a different reason than the rest of this list. It
+# is not clutter — it is a working provider (ChatGPT/Codex OAuth) that must never be
+# turned on here. Hermes also delegates coding tasks to the Codex CLI as a
+# subprocess (docs/models/codex-handoff.md), and that CLI reads its own OAuth token
+# from ~/.codex/auth.json against the SAME ChatGPT 5-hour usage window this provider
+# would draw from ~/.hermes/auth.json. Two consumers of one quota, invisible to each
+# other. CI asserts this entry stays present for exactly that reason.
+#
 # Switching mid-session, with the names as they now stand:
 #   /model custom:nvidia-nim:moonshotai/kimi-k3
 #   /model custom:hf-router:Qwen/Qwen3.6-35B-A3B
@@ -265,6 +273,7 @@ excluded_providers:
   - openrouter
   - anthropic
   - openai
+  - openai-codex
   - copilot
   - google
   - mistral
