@@ -8,10 +8,36 @@ follow the steps below.
 
 ## Division of labour
 
-| Model | Does | Does not |
-|---|---|---|
-| **Nemotron Nano 12B v2** (local) | Runs the numbered steps. Copies commands, compares output to the stated success line, reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. |
-| **Claude Sonnet** | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
+Three actors, not two — because the local runner cannot run the steps that install
+the local runner, and every earlier version of this table left that unsaid.
+
+| Actor | Available | Does | Does not |
+|---|---|---|---|
+| **A human, or Claude** | from the start | Phases 0 through step 1.7, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
+| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.7 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
+| **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
+
+**Why a vision model runs this runbook.** The loop below is "compare the output to
+the stated success line", and on a Windows bring-up much of that output is not text.
+`winget`'s installer dialogs, the VS Code terminal dropdown that must read
+*PowerShell* rather than Command Prompt, the `ollama list` table, an error popup,
+the Cloudflare and Render dashboard pages — a text-only runner sees none of it,
+because none of it arrives on stdout. Several success lines in this file describe
+exactly those things. Hand the VL model a screenshot and it can check them.
+
+**It reads and reports; it does not execute.** This model was imported from a bare
+GGUF with no `TEMPLATE` directive, so its tool-calling convention is unverified —
+the same risk `VSCODE-QUICKSTART.md` §2.6 exists to catch on the other local models,
+and a wrong template degrades tool use while ordinary chat looks perfect. Commands
+stay in the shell a human or the harness drives. If you want this model driving
+execution, run the §2.6 tool-calling probe against it first and treat a pass as the
+precondition, not an assumption.
+
+**The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
+`llama-server` on `127.0.0.1:8080`, and step 1.7 is what starts it. Before that it
+has no backend, so it cannot be the thing checking step 1.7's own success line.
+The same was quietly true of the model this table used to name — imported at step
+1.4 — which is how a runbook ends up implying a model runs the steps that create it.
 
 **The one rule that matters:** a step is done when its success line matches. Not
 when the command exits 0, not when the output looks plausible. A wrong chat
@@ -537,9 +563,9 @@ divergence went unrecorded for three days and cost a session to rediscover.
 |---|---|---|
 | Model answers but ignores tools | Sonnet | Wrong chat template — fix the Modelfile `TEMPLATE` |
 | Parent resolves to the wrong model | Sonnet | NOT router coverage — the HF router is confirmed to serve V4-Pro via 4 live providers. Check `HF_TOKEN`, `discover_models`, and the returned-vs-requested id from `-Deep` |
-| `hermes mcp list` missing an entry | Nemotron | Re-run step 3.2, restart gateway, re-check once |
-| `ModuleNotFoundError: mcp.server.fastmcp` | Nemotron | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
+| `hermes mcp list` missing an entry | VL runner | Re-run step 3.2, restart gateway, re-check once |
+| `ModuleNotFoundError: mcp.server.fastmcp` | VL runner | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
 | `codex mcp list` says `Unsupported` | **Nobody** | Expected and unfixable — the interface was removed upstream. Delegation is the subprocess path; prove it at step 5.5 |
 | A fallback/aux slot 404s on OpenRouter | Sonnet | OpenRouter ids are lowercase `deepseek/...`, not the Hugging Face `deepseek-ai/DeepSeek-...` form. Same model, different namespace |
 | Any key visible outside `.env` | **Human** | Rotate it first, then continue |
-| Ollama tag not found | Nemotron | Tag string must match `config.yaml` exactly; re-run step 1.4 |
+| Ollama tag not found | VL runner | Tag string must match `config.yaml` exactly; re-run step 1.4 |
