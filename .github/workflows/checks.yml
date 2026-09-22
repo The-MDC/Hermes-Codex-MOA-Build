@@ -68,6 +68,41 @@ jobs:
           [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
           [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
 
+      # The PowerShell scripts were unverified for three commits, because the
+      # container they were written in has no pwsh and the Syntax step above only
+      # globs *.sh and *.js. They are the scripts that install config onto a real
+      # machine and the ones a takeover depends on, so "unchecked" was the wrong
+      # place for them. ubuntu-latest ships pwsh, so this costs nothing.
+      #
+      # ParseFile against the real PowerShell AST parser, not a regex: it is the
+      # same front end pwsh itself uses, so a file that passes here cannot fail to
+      # parse on the Windows box. It does NOT prove the script behaves correctly --
+      # only that it is syntactically whole.
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem scripts -Filter *.ps1 | Sort-Object Name
+          if ($files.Count -lt 3) {
+              Write-Error "expected >=3 PowerShell scripts, found $($files.Count)"
+              exit 1
+          }
+          $bad = 0
+          foreach ($f in $files) {
+              $errors = $null; $tokens = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $f.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors -and $errors.Count) {
+                  Write-Host "FAIL  $($f.Name): $($errors.Count) parse error(s)"
+                  foreach ($e in $errors) {
+                      Write-Host ("      line {0}: {1}" -f $e.Extent.StartLineNumber, $e.Message)
+                  }
+                  $bad++
+              } else {
+                  Write-Host "ok    $($f.Name) ($($tokens.Count) tokens)"
+              }
+          }
+          if ($bad) { exit 1 }
+
       # The Hermes config is data, not code: nothing in this repo executes it, so a
       # syntax error would surface only on the desktop that copies it into
       # ~/.hermes/config.yaml — where a malformed file makes Hermes fall back to its
@@ -82,28 +117,40 @@ jobs:
           d = yaml.safe_load(open("configs/hermes/config.yaml"))
 
           providers = d["providers"]
+          # Assert the key exists before indexing it. Renaming this provider is a
+          # real deployment shape (handoff-2026-09-22.md reports `nvidia`), and
+          # indexing a missing key raises a bare KeyError that names no cause —
+          # the one failure mode most likely to hit someone mid-reconciliation.
+          assert "nvidia-nim" in providers, \
+              "providers: must define 'nvidia-nim' — every custom:nvidia-nim reference " \
+              "in this file resolves through that exact key, so renaming it dangles them all"
           assert providers["nvidia-nim"]["api"] == "https://integrate.api.nvidia.com/v1", \
               "the NIM provider must point at NVIDIA's endpoint"
           assert providers["nvidia-nim"]["key_env"] == "NVIDIA_API_KEY", \
               "the NIM key must come from the environment, never from this file"
 
-          # Subagents must not reach the metered endpoint, and must not be able to
+          # Subagents must not reach the parent's endpoint, and must not be able to
           # fall back onto it. That separation is the whole point of the config; a
-          # regression here quietly burns the NIM rate limit with no visible symptom.
+          # regression here quietly burns the parent's rate limit with no symptom.
           #
-          # The invariant is "a different rate-limit bucket from the parent" — NOT
-          # "local". An earlier revision asserted 127.0.0.1, which encoded the
-          # implementation (a local llama-server) rather than the requirement, and
-          # would have blocked the cloud-only layout this now uses.
+          # The invariant is "a different rate-limit bucket from the parent", and it
+          # has now been narrowed wrongly TWICE, so it is worth stating plainly.
+          # An early revision asserted 127.0.0.1, encoding a local llama-server
+          # rather than the requirement. Its replacement asserted that subagents
+          # avoid nvidia-nim, which encoded the topology where NIM was the PARENT's
+          # bucket. Neither is the rule. When the parent moved to the HF router,
+          # NIM became the children's own bucket and a fan-out there cannot starve
+          # the parent -- so the NIM-specific clause was blocking a correct layout.
+          #
+          # Express the requirement itself and nothing narrower: a different
+          # provider from the parent, and no chain back to it.
           deleg = d["delegation"]
           parent_provider = d["model"]["provider"]
           assert deleg.get("provider"), "subagents must name a provider"
           assert deleg["provider"] != parent_provider, \
               "subagents must not share the parent's provider"
-          assert "nvidia-nim" not in deleg["provider"], \
-              "subagents must not run on the metered NIM bucket"
           assert deleg["fallback_providers"] == [], \
-              "subagents must have no fallback chain back onto NIM"
+              "subagents must have no fallback chain back onto the parent"
 
           # Every REMOTE provider authenticates from the environment. One inline key
           # here would be committed, and the repo's own rule is that secrets never are.
@@ -173,18 +220,28 @@ jobs:
           # injected into the system prompt. Two invariants, both about throughput
           # as much as trust.
           #
-          # 1. Loopback or local subprocess only. `hermes import-agent claude-code`
-          #    migrates .mcp.json wholesale, which would drag seven hosted company
-          #    MCPs (supabase, github, alchemy, figma, gmail, drive, netlify) into
-          #    a personal agent build. Each is a round trip and a block of prompt.
+          # 1. Loopback or local subprocess, UNLESS the server is on the hosted
+          #    allowlist below. `hermes import-agent claude-code` migrates
+          #    .mcp.json wholesale, which would drag seven hosted company MCPs
+          #    (supabase, github, alchemy, figma, gmail, drive, netlify) into a
+          #    personal agent build. Each is a round trip and a block of prompt.
+          #
+          #    The allowlist is how a hosted server gets in ON PURPOSE rather than
+          #    by drift: adding one is a visible edit to this file, reviewed, not a
+          #    line that slipped into a config nobody re-reads. Keep it short. Every
+          #    name here costs a round trip per call and prompt space on every
+          #    request, against every bucket at once.
           # 2. Every server names its tools. An unfiltered server injects its whole
           #    catalogue forever; on a 40 RPM tier that is a permanent tax.
+          HOSTED_MCP_ALLOWED = {"cloudflare", "submcp"}
           mcp = d.get("mcp_servers", {}) or {}
           for name, srv in mcp.items():
               if "url" in srv:
                   host = urlparse(srv["url"]).hostname or ""
-                  assert host in LOOPBACK, \
-                      f"mcp_servers.{name} points off-box at {host} — Hermes MCPs must be loopback"
+                  assert host in LOOPBACK or name in HOSTED_MCP_ALLOWED, \
+                      f"mcp_servers.{name} points off-box at {host} and is not in " \
+                      f"HOSTED_MCP_ALLOWED — add it there deliberately, with a reason, " \
+                      f"or keep it in Claude Code's .mcp.json instead"
               else:
                   assert srv.get("command"), \
                       f"mcp_servers.{name} has neither a loopback url nor a command"
@@ -208,20 +265,74 @@ jobs:
                   f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
               assert cfg.get("model"), f"auxiliary.{task} names a provider but no model"
 
+          # Every provider REFERENCE must resolve to something that can actually
+          # serve. The exclusion check above compares excluded_providers against the
+          # `providers:` dict only — it never looks at what the REST of the file
+          # points at, and both ways a reference dies are silent: Hermes resolves a
+          # dead one by falling back to the main model, so the symptom is a bill and
+          # a latency change, not an error. Both were observed on a live deployment,
+          # recorded in docs/models/handoff-2026-09-22.md.
+          #
+          #   1. The reference names a provider that is also EXCLUDED. The exclusion
+          #      hides it, so the slot silently reverts to the parent. A config with
+          #      moa.aggregator on `anthropic` while `anthropic` sits in the
+          #      exclusion list is the case this catches.
+          #   2. `custom:X` names an X that is not in `providers:` at all, after a
+          #      rename (nvidia-nim -> nvidia) or a deletion. Every reference to the
+          #      old name dangles, and the slots quietly rejoin the parent bucket.
+          def provider_refs():
+              yield "model.provider", parent_provider
+              yield "delegation.provider", deleg["provider"]
+              for task_, cfg_ in aux.items():
+                  yield f"auxiliary.{task_}.provider", cfg_.get("provider")
+              moa = d.get("moa") or {}
+              for i, ref_ in enumerate(moa.get("reference_models") or []):
+                  yield f"moa.reference_models[{i}].provider", (ref_ or {}).get("provider")
+              if moa.get("aggregator"):
+                  yield "moa.aggregator.provider", moa["aggregator"].get("provider")
+
+          for where, ref in provider_refs():
+              if not ref or ref == "auto":
+                  continue
+              custom = ref.startswith("custom:")
+              bare = ref.split(":", 1)[1] if custom else ref
+              assert bare.lower() not in excluded, \
+                  f"{where} names '{bare}', which is in excluded_providers — the " \
+                  f"exclusion hides it and the slot falls back to the main model"
+              if custom:
+                  assert bare in providers, \
+                      f"{where} points at custom provider '{bare}', which is not " \
+                      f"defined in providers: — a rename or deletion left it dangling"
+
           # The throughput block. These are deliberate, counter-intuitive choices;
           # a well-meaning edit back to the defaults would quietly undo them.
           ce = d.get("code_execution", {})
           assert ce.get("mode") in ("project", "strict"), \
               "code_execution.mode must be set — it collapses multi-call pipelines into one request"
 
+          # The PARENT model must have a raised compaction threshold, whatever the
+          # parent currently is. This used to hardcode `kimi-k3`, which stopped
+          # guarding anything the moment the parent changed: the key stayed, the
+          # assertion kept passing, and it referred to a model no longer in use.
+          # Resolve the key against the configured parent instead, by substring,
+          # the same way Hermes resolves it.
           comp = d.get("compression", {})
-          kimi = (comp.get("model_thresholds") or {}).get("kimi-k3")
-          assert kimi is not None and kimi > comp.get("threshold", 0.50), \
-              "kimi-k3 compression threshold must be RAISED above the global default: " \
-              "each compaction is itself a request, and requests are the scarce resource here"
-          assert kimi <= 0.80, \
-              "kimi-k3 threshold above 0.80 risks provider-proven overflow, which costs " \
-              "a rejected request plus recovery — worse than the compaction it avoids"
+          parent_model = d["model"]["default"]
+          thresholds = comp.get("model_thresholds") or {}
+          matched = {k: v for k, v in thresholds.items()
+                     if k.lower() in parent_model.lower()}
+          assert matched, \
+              f"compression.model_thresholds has no key matching the parent model " \
+              f"({parent_model}) -- Hermes matches these by substring, so a stale key " \
+              f"guards nothing and the parent compacts at the global default unnoticed"
+          parent_threshold = matched[max(matched, key=len)]  # longest key wins
+          assert parent_threshold > comp.get("threshold", 0.50), \
+              "the parent's compression threshold must be RAISED above the global " \
+              "default: each compaction is itself a request AND it invalidates the " \
+              "provider prompt cache, so the next request re-reads all of it at full price"
+          assert parent_threshold <= 0.80, \
+              "a parent threshold above 0.80 risks provider-proven overflow, which costs " \
+              "a rejected request plus recovery -- worse than the compaction it avoids"
 
           # Rotating a credential pool discards the provider-side prompt cache, and
           # Kimi-K3 carries a large always-thinking prefix. round_robin would pay
@@ -253,11 +364,14 @@ jobs:
           print("  subagents ", deleg["provider"], deleg["model"])
           print("  buckets   ", ", ".join(sorted(hosts)))
           print("  web       ", web.get("search_backend"), "+", web.get("extract_backend"))
-          print("  mcp       ", len(mcp), "server(s), all loopback/local, all tool-filtered")
+          hosted_used = sorted(n for n in mcp if n in HOSTED_MCP_ALLOWED)
+          print("  mcp       ", len(mcp), "server(s),",
+                (f"{len(hosted_used)} hosted ({', '.join(hosted_used)})"
+                 if hosted_used else "all loopback/local") + ", all tool-filtered")
           print("  auxiliary ", len(aux), "slot(s) off the parent bucket ->",
                 sorted({c["provider"] for c in aux.values()}))
           print("  throughput", "execute_code:" + str(ce.get("mode")),
-                "| kimi compress@" + str(kimi),
+                "| parent compress@" + str(parent_threshold),
                 "| pools:" + ",".join(sorted(pools)))
           print("  picker    ", len([m for p_ in providers.values() for m in p_["models"]]),
                 "models, pinned;", len(excluded), "built-ins excluded")

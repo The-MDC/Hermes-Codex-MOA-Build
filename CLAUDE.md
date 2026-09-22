@@ -48,9 +48,18 @@
 - **Vercel is not deploying `MAD-MPP-2.23`.** Last production build 2026-08-19 14:00 UTC; four
   pushes since produced zero deployments. Merging to `main` does not reach the live site. Deploy
   with `cd verify && npx vercel --prod` until the Git integration is reconnected to the MDC org.
-- **GitHub Actions is queue-blocked.** Repo-owned runs from 2026-08-18 and 2026-08-19 are still
-  `queued`; Dependabot's GitHub-hosted runs complete in seconds. Signature of an exhausted Actions
-  minutes / spending limit at the org level. No PR in this repo can show a green check until it clears.
+- ~~**GitHub Actions is queue-blocked.**~~ **RESOLVED 2026-09-22.** Repo-owned runs now complete
+  in 6-12 seconds; PR #13 went green six consecutive times. Whatever the 2026-08 queue block was
+  (an exhausted org Actions allowance was the theory), it has cleared. Kept struck-through rather
+  than deleted so nobody re-derives the old conclusion from the old symptom.
+- **Cloudflare Workers is attached to this repo and cannot succeed.** A Workers Git integration was
+  connected some time after 2026-09-19 — PRs #11 and #12 have no such check, #13 does. This repo is
+  a Claude Code configuration tree: no `package.json`, no `wrangler.*`, nothing deployable. The build
+  fails in **0 seconds**, before reading the repo, on every commit including docs-only ones, and by
+  2026-09-22 11:30 it was retry-looping several builds per minute on one unchanged commit. No repo
+  change can fix it. Disconnect the Git integration in the Cloudflare dashboard (account
+  `d266f6c59a542bce7394fb28b7580327`, service `madhats-claude-enhancement`) or revoke the GitHub
+  App's access to this repo.
 
 ### Never claim without evidence
 "15,000 users" (it is a **waitlist**) · measured retention · "industry's first" · "regulatory-safe" ·
