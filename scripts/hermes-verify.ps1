@@ -84,11 +84,21 @@ if (-not (Test-Path $ConfigPath)) {
 
     # An inline key here would be committed-shaped and is the repo's one hard rule.
     # Match the shape, never print the match.
+    $keyLeak = $false
     foreach ($shape in @('nvapi-[A-Za-z0-9_\-]{20,}', 'hf_[A-Za-z0-9]{30,}',
                          'sk-or-v1-[A-Za-z0-9]{20,}')) {
-        if ($raw -match $shape) { Fail "config.yaml contains something shaped like a live key - rotate it, then move it to .env" }
+        if ($raw -match $shape) {
+            Fail "config.yaml contains something shaped like a live key - rotate it, then move it to .env"
+            $keyLeak = $true
+        }
     }
-    if ($script:Fail -eq 0) { Ok 'no key-shaped string in config.yaml' }
+    # Gated on THIS scan, not on $script:Fail. It used to read
+    # `if ($script:Fail -eq 0)`, so any unrelated earlier failure -- `hermes` not
+    # on PATH is enough -- silently swallowed the clean result. A security check
+    # that goes quiet for a reason having nothing to do with security is worse
+    # than one that is simply absent: the reader sees no line and cannot tell
+    # whether it passed, failed, or never ran.
+    if (-not $keyLeak) { Ok 'no key-shaped string in config.yaml' }
 
     # Render carried an inline bearer token in an earlier revision of this file.
     if ($raw -match '(?m)^\s{2}render\s*:') {
@@ -105,6 +115,29 @@ if (-not (Test-Path $EnvPath)) {
         if ($envRaw -match "(?m)^\s*$k\s*=\s*\S") { Ok "$k is set" }
         else { Warn "$k not set - the tier that uses it will fail over" }
     }
+}
+
+# Portable TCP reachability check.
+#
+# REPLACES Test-NetConnection, which is Windows-only. HANDOFF-NEXT-SESSION.md lists
+# it under "Assumed, NOT verified" as a code path that has never executed -- and off
+# Windows it does not fail cleanly, it throws "term not recognized" straight to
+# stderr while the surrounding logic carries on. TcpClient ships with .NET core and
+# behaves identically on every platform, so these two checks can now be exercised in
+# a container and in CI rather than only on the target box. One fewer assumption.
+function Test-Port($hostname, $port, $timeoutMs = 2000) {
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $async  = $client.BeginConnect($hostname, $port, $null, $null)
+        $opened = $async.AsyncWaitHandle.WaitOne($timeoutMs, $false)
+        if ($opened) {
+            # WaitOne returning true only means the wait ended; EndConnect is what
+            # distinguishes an accepted connection from a refused one.
+            try { $client.EndConnect($async) } catch { $opened = $false }
+        }
+        $client.Close()
+        return $opened
+    } catch { return $false }
 }
 
 # ---------------------------------------------------------------- local models
@@ -128,10 +161,62 @@ if ($ollama) {
         else { Info "$m not present yet - not required until stage b" }
     }
 
-    $port = Test-NetConnection -ComputerName '127.0.0.1' -Port 11434 `
-                -InformationLevel Quiet -WarningAction SilentlyContinue
+    $port = Test-Port '127.0.0.1' 11434
     if ($port) { Ok 'Ollama answering on 127.0.0.1:11434' }
     else { Fail 'nothing listening on 127.0.0.1:11434 - run `ollama serve`' }
+}
+
+# ------------------------------------------------- local vision (llama.cpp)
+# Only checked when the config actually declares the provider, so an install that
+# reverted `vision` to the cloud route does not get told off about a server it
+# deliberately does not run.
+#
+# The model id is read from the config rather than written here, for the same
+# reason the Deep probes are: two copies of one fact drift, and the copy in the
+# checker is the one that reports green on something Hermes never sends.
+# Read the config fresh rather than reusing $raw from the config section: that
+# variable is only assigned when the file exists, and depending on it here would
+# make this block's behaviour hinge on whether an earlier branch ran.
+$vlCfg = if (Test-Path $ConfigPath) { Get-Content $ConfigPath -Raw } else { $null }
+if ($vlCfg -and $vlCfg -match '(?m)^\s{2}local-vl\s*:') {
+    Section 'local vision (llama.cpp)'
+
+    $vlModel = $null
+    $inBlock = $false
+    foreach ($line in ($vlCfg -split '\r?\n')) {
+        if ($line -match '^\s{2}local-vl\s*:\s*$') { $inBlock = $true; continue }
+        if ($inBlock) {
+            if ($line -match '^\s{0,2}\S') { break }
+            if ($line -match '^\s{4}default_model\s*:\s*(\S+)\s*$') { $vlModel = $Matches[1]; break }
+        }
+    }
+    if (-not $vlModel) {
+        Fail 'local-vl is declared but its default_model could not be read from config.yaml'
+    }
+
+    $vlPort = Test-Port '127.0.0.1' 8080
+    if (-not $vlPort) {
+        # FAIL rather than Warn: `vision` routes here, so a stopped server is a
+        # missing capability, and Hermes surfaces that as a bad answer about an
+        # image rather than as an error. That confusion is the whole reason this
+        # tier exists as its own server.
+        Fail 'nothing listening on 127.0.0.1:8080 - vision routes here, so it is DOWN. Start llama-server with --mmproj (see configs/hermes/config.yaml, local-vl)'
+    } else {
+        Ok 'llama-server answering on 127.0.0.1:8080'
+        try {
+            $vlCat = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/models' -TimeoutSec 15
+            $vlIds = @($vlCat.data | ForEach-Object { $_.id })
+            if ($vlIds -contains $vlModel) {
+                Ok "llama-server serves '$vlModel'"
+            } else {
+                # Almost always a missing --alias: llama-server otherwise names the
+                # model after its file path, which will not match the config.
+                Fail "llama-server does NOT serve '$vlModel' - it reports: $($vlIds -join ', '). Start it with --alias $vlModel"
+            }
+        } catch {
+            Warn "llama-server catalog unreadable: $($_.Exception.Message)"
+        }
+    }
 }
 
 # ---------------------------------------------------------------- MCP
@@ -143,7 +228,7 @@ if ($hermes) {
         'a'  { @('crawl4ai', 'atomicmemory') }
         'b'  { @('crawl4ai', 'atomicmemory', 'hermes-skills') }
         default { @('voicebox', 'crawl4ai', 'atomicmemory', 'hermes-skills',
-                    'hermes-council', 'cloudflare', 'submcp') }
+                    'hermes-council', 'cloudflare', 'submcp', 'codex-mcp') }
     }
     foreach ($s in $expected) {
         if ($mcpOut -match [regex]::Escape($s)) { Ok "$s registered" }
@@ -157,6 +242,15 @@ if ($hermes) {
     if ($mcpOut -match 'hermes-council' -and $mcpOut -match '(?i)error|failed|unsupported') {
         Warn 'hermes-council is erroring - check WHICH interpreter it ran under (scripts/hermes-blockers.ps1) before suspecting packages'
     }
+    # Same check, one runtime over. config.yaml names this launcher as codex-mcp's
+    # command, and an unset variable means the server never starts -- which surfaces
+    # as the Codex tools simply being absent, not as an error.
+    if (-not $env:HERMES_CODEX_LAUNCHER) {
+        Warn 'HERMES_CODEX_LAUNCHER not set - config.yaml names it as codex-mcp''s command'
+    } elseif (-not (Test-Path $env:HERMES_CODEX_LAUNCHER)) {
+        Fail "HERMES_CODEX_LAUNCHER points at a missing file: $env:HERMES_CODEX_LAUNCHER"
+    } else { Ok 'codex-mcp launcher present' }
+
     if (-not $env:HERMES_COUNCIL_LAUNCHER) {
         Warn 'HERMES_COUNCIL_LAUNCHER not set - config.yaml names it as hermes-council''s command'
     } elseif (-not (Test-Path $env:HERMES_COUNCIL_LAUNCHER)) {
@@ -164,12 +258,35 @@ if ($hermes) {
     } else { Ok 'council launcher present' }
 }
 
-if ($codex) {
+# The Codex MCP bridge. WARN, not FAIL, and the demotion is the point.
+#
+# `Unsupported` here is PERMANENT and not a fault of this install. Codex 0.154.0
+# removed the `codex mcp-server` entry point on 2026-09-05; the replacement,
+# `codex app-server`, speaks its own JSON-RPC 2.0 protocol and is not an MCP
+# server. Codex is an MCP *client* now. No handshake exists to succeed.
+#
+# This used to raise Fail, which made the whole script unpassable: TAKEOVER.md
+# phase 6.1 asks for `OK no failures` as the final gate, and on any box with
+# codex on PATH that verdict could never be reached. A gate that cannot go green
+# stops being read -- and then it hides the failures that ARE real. Worse, this
+# script contradicted scripts/hermes-blockers.ps1, which already recommends
+# option (a): do nothing, because delegation does not use this interface.
+#
+# Hermes reaches Codex as a SUBPROCESS via the bundled `codex` skill
+# (docs/models/codex-handoff.md). That path is unaffected and is the supported
+# one. Do not "fix" this by setting model.openai_runtime: codex_app_server --
+# that routes Hermes' own reasoning through Codex and creates a second, invisible
+# consumer of the same ChatGPT 5-hour window, which is exactly what
+# `openai-codex` sits in excluded_providers to prevent.
+#
+# Gated on stage because line 26 says codex is not required until stage b, and
+# this check ran at stage a regardless.
+if ($codex -and $Stage -ne 'a') {
     $codexOut = (& codex mcp list 2>&1 | Out-String)
     if ($codexOut -match '(?i)unsupported') {
-        Fail 'codex mcp list reports Unsupported - the bridge is registered but the handshake fails (protocol version mismatch, not a missing install)'
+        Warn 'codex mcp list reports Unsupported - EXPECTED. The interface was removed upstream (Codex 0.154.0, 2026-09-05); Codex is MCP-client-only now. Delegation runs as a subprocess and is unaffected. Not a blocker, and not fixable here'
     } elseif ($codexOut -match 'hermes') { Ok 'codex bridge handshake OK' }
-    else { Warn 'no hermes entry in codex mcp list' }
+    else { Warn 'no hermes entry in codex mcp list - delegation uses the subprocess path, so this is informational' }
 }
 
 # ---------------------------------------------------------------- endpoints
@@ -235,9 +352,54 @@ if ($Deep) {
         }
     }
 
-    Probe 'hf-router'   'https://router.huggingface.co/v1'     'HF_TOKEN'           'deepseek-ai/DeepSeek-V4-Pro'
-    Probe 'nvidia-nim'  'https://integrate.api.nvidia.com/v1'  'NVIDIA_API_KEY'     'nvidia/nemotron-3-super-120b-a12b'
-    Probe 'or-fallback' 'https://openrouter.ai/api/v1'         'OPENROUTER_API_KEY' 'deepseek-ai/DeepSeek-V4.1-Flash'
+    # Read the endpoint and the model id OUT OF THE CONFIG BEING VERIFIED rather
+    # than restating them here. THIS IS THE FIX FOR A BUG THIS FILE SHIPPED.
+    #
+    # These three lines used to carry literals. One of them probed OpenRouter for
+    # `deepseek-ai/DeepSeek-V4.1-Flash` -- the Hugging Face repo id, which
+    # OpenRouter does not serve under that name. Correcting config.yaml alone would
+    # have left this script still probing the old id and reporting green; correcting
+    # this script alone would have left Hermes still sending the wrong one. Two
+    # copies of one fact, and either can be fixed without the other.
+    #
+    # So there is one copy now, and it is the one Hermes actually reads.
+    #
+    # Deliberately NOT a YAML parser. It reads two scalars out of a known block
+    # shape and FAILS when it cannot find them. Falling back to a literal on a parse
+    # miss would rebuild the exact hazard this replaces -- and a silent fallback is
+    # the bug class this whole file exists to catch.
+    function Get-ProviderField($provider, $field) {
+        $lines = Get-Content $ConfigPath
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^\s{2}$([regex]::Escape($provider))\s*:\s*$") { $start = $i; break }
+        }
+        if ($start -lt 0) { return $null }
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            # A key at column 0 or 2 ends this provider's block. Everything that
+            # belongs to it -- including its comments -- is indented 4.
+            if ($lines[$i] -match '^\s{0,2}\S') { break }
+            if ($lines[$i] -match "^\s{4}$([regex]::Escape($field))\s*:\s*(\S+)\s*$") {
+                return $Matches[1]
+            }
+        }
+        return $null
+    }
+
+    function Probe-Configured($name, $keyVar) {
+        $url   = Get-ProviderField $name 'api'
+        $model = Get-ProviderField $name 'default_model'
+        if (-not $url -or -not $model) {
+            Fail "could not read providers.$name (api / default_model) from $ConfigPath - refusing to guess; a probe against a guessed id proves nothing"
+            return
+        }
+        Info "$name -> $model @ $url"
+        Probe $name $url $keyVar $model
+    }
+
+    Probe-Configured 'hf-router'   'HF_TOKEN'
+    Probe-Configured 'nvidia-nim'  'NVIDIA_API_KEY'
+    Probe-Configured 'or-fallback' 'OPENROUTER_API_KEY'
 }
 
 # ---------------------------------------------------------------- verdict

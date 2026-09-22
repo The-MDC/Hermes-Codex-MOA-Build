@@ -1,3 +1,9 @@
+---
+name: smart-contracts
+description: Solidity and Foundry work for MADHATs Gambit — contracts, forge tests, deployment, gas optimization, ERC standards, oracle integration, NFT mechanics and prediction market resolution. Targets Base L2 primary, Arbitrum and HyperEVM secondary.
+origin: MADHATs
+---
+
 # Skill: Smart Contract Development — MADHATs Gambit
 
 ## When to Use This Skill

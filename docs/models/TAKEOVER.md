@@ -8,10 +8,40 @@ follow the steps below.
 
 ## Division of labour
 
-| Model | Does | Does not |
-|---|---|---|
-| **Nemotron Nano 12B v2** (local) | Runs the numbered steps. Copies commands, compares output to the stated success line, reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. |
-| **Claude Sonnet** | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
+Three actors, not two — because the local runner cannot run the steps that install
+the local runner, and every earlier version of this table left that unsaid.
+
+| Actor | Available | Does | Does not |
+|---|---|---|---|
+| **A human, or Claude** | from the start | Phases 0 through step 1.7, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
+| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.7 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
+| **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
+
+**Why a vision model runs this runbook.** The loop below is "compare the output to
+the stated success line", and on a Windows bring-up much of that output is not text.
+`winget`'s installer dialogs, the VS Code terminal dropdown that must read
+*PowerShell* rather than Command Prompt, the `ollama list` table, an error popup,
+the Cloudflare and Render dashboard pages — a text-only runner sees none of it,
+because none of it arrives on stdout. Several success lines in this file describe
+exactly those things. Hand the VL model a screenshot and it can check them.
+
+**It reads and reports; it does not execute — until step 1.8 says otherwise.** This
+model was imported from a bare GGUF with no `TEMPLATE` directive, so its tool-calling
+convention is unverified, and a wrong template degrades tool use while ordinary chat
+looks perfect. Commands stay in the shell a human or the harness drives.
+
+**Step 1.8 is the gate that lifts this.** It runs two probes against :8080 — one that
+the model genuinely sees an image, one that it emits real `tool_calls` — and its
+outcome table says which of the three roles this runner may actually hold. Do not
+promote it to driving execution on the strength of ordinary chat looking fine; that
+is exactly what a wrong template hides. (`VSCODE-QUICKSTART.md` §2.6 is the equivalent
+probe for the two **Ollama** models on :11434; it does not cover this one.)
+
+**The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
+`llama-server` on `127.0.0.1:8080`, and step 1.7 is what starts it. Before that it
+has no backend, so it cannot be the thing checking step 1.7's own success line.
+The same was quietly true of the model this table used to name — imported at step
+1.4 — which is how a runbook ends up implying a model runs the steps that create it.
 
 **The one rule that matters:** a step is done when its success line matches. Not
 when the command exits 0, not when the output looks plausible. A wrong chat
@@ -165,6 +195,150 @@ it would call. Both mean the template is wrong.
 **ESCALATE** on failure. The fix is a `TEMPLATE` directive in the Modelfile, and
 choosing it is a judgment call.
 
+### Step 1.7 — Local vision: llama.cpp, NOT Ollama
+
+**Do not try to do this with Ollama.** A VL GGUF ships as two files — the language
+model and a separate `mmproj` projector — and Ollama's Modelfile cannot attach the
+second one. Two `FROM` lines error, `ADAPTER` does not work
+([ollama#14730](https://github.com/ollama/ollama/issues/14730),
+[ollama#9967](https://github.com/ollama/ollama/issues/9967)).
+
+The failure mode is why this warning is here: **`ollama create` succeeds**, silently
+dropping the projector. You get a model with `-VL` in its name that cannot see —
+the same silent capability loss that `vision: auto` already caused once.
+
+Download both files (≈10.5 GB total):
+
+```powershell
+hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
+  --include '*Q5_K_M*.gguf' '*mmproj*.gguf' `
+  --local-dir "$HOME\Models\nemotron-nano-12b-v2-vl"
+```
+
+**Success:** two files — `...VL-Q5_K_M.gguf` at about **8.77 GB** and
+`...VL-BF16-mmproj.gguf` at about **1.69 GB**. The projector is not quantized and
+there is only one; if you have only the first file, vision will not work.
+
+Then serve both. Requires **llama.cpp b6315 or later** — that is where `nemotron_h`,
+this model's hybrid Mamba-Transformer architecture, became supported. An older build
+refuses to load rather than degrading, which is the good failure.
+
+```powershell
+$m = "$HOME\Models\nemotron-nano-12b-v2-vl"
+llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
+             --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
+             --alias nemotron-nano-12b-v2-vl `
+             --host 127.0.0.1 --port 8080
+```
+
+**`--alias` is load-bearing.** Without it llama-server names the model after its
+file path, `config.yaml`'s `local-vl.default_model` stops matching, and
+`hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+
+**Success:**
+
+```powershell
+(Invoke-RestMethod http://127.0.0.1:8080/v1/models).data.id
+```
+
+prints exactly `nemotron-nano-12b-v2-vl`.
+
+Leave it running. The `vision` auxiliary slot routes here, so a stopped server is a
+missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
+
+**If you would rather not run a second local service,** revert `vision` in
+`config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`. That model
+is natively multimodal and is what fixed the slot originally. One line, no loss
+except offline capability.
+
+### Step 1.8 — Prove the VL model SEES and CALLS TOOLS
+
+Two probes, and they answer two different questions. Run both.
+
+The division-of-labour table scopes the VL runner to **read, compare and report** —
+not to execute commands — precisely because its tool calling is unproven. This step
+is what lifts that restriction, or confirms it should stay.
+
+**Probe 1 — does it actually see?** The whole reason for this tier. A VL model served
+without its projector loads fine and answers about images from the text alone.
+
+```powershell
+Add-Type -AssemblyName System.Drawing
+$bmp = New-Object System.Drawing.Bitmap 64,64
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.Clear([System.Drawing.Color]::White)
+$g.FillEllipse([System.Drawing.Brushes]::Red, 8, 8, 48, 48)
+$g.Dispose()
+$ms = New-Object System.IO.MemoryStream
+$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$bmp.Dispose(); $ms.Dispose()
+
+$body = @{
+  model = 'nemotron-nano-12b-v2-vl'
+  messages = @(@{
+    role = 'user'
+    content = @(
+      @{ type='text'; text='What colour is the shape? Answer with one word.' },
+      @{ type='image_url'; image_url=@{ url="data:image/png;base64,$b64" } }
+    )
+  })
+  max_tokens = 10
+} | ConvertTo-Json -Depth 12
+
+(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
+  -ContentType 'application/json' -Body $body).choices[0].message.content
+```
+
+**Success:** the reply says **red**.
+
+**Failure looks like** a refusal, a description of something that is not there, or a
+guess like "blue" — all of which mean the projector is not attached. Restart
+`llama-server` and confirm `--mmproj` is on the command line and points at the
+`...mmproj.gguf` file, not at the model. This is the failure that `ollama create`
+produces silently, and it is why this tier is not an Ollama tag.
+
+**Probe 2 — does it emit real `tool_calls`?**
+
+```powershell
+$body = @{
+  model = 'nemotron-nano-12b-v2-vl'
+  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
+  tools = @(@{
+    type = 'function'
+    function = @{
+      name = 'get_weather'
+      description = 'Get current weather for a city'
+      parameters = @{
+        type = 'object'
+        properties = @{ city = @{ type='string' } }
+        required = @('city')
+      }
+    }
+  })
+} | ConvertTo-Json -Depth 10
+
+(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
+  -ContentType 'application/json' -Body $body).choices[0].message | ConvertTo-Json -Depth 10
+```
+
+**Success:** a `tool_calls` array naming `get_weather`.
+
+**Failure looks like** prose about the weather, or prose *describing* the tool it
+would call. Both mean the chat template is wrong — the GGUF was imported with no
+`TEMPLATE` directive, so whatever the file embeds is what you get.
+
+**What each outcome means for the role:**
+
+| Probe 1 | Probe 2 | The VL runner |
+|---|---|---|
+| red | `tool_calls` | Can read, compare, report **and drive execution**. Lift the restriction |
+| red | prose | Reads and reports only, as the table already says. Usable — this is the expected case until a template is fixed |
+| wrong | either | **Not usable for vision at all.** `--mmproj` is missing or wrong; fix that before anything else |
+
+**ESCALATE** on a probe-1 failure. A template fix for probe 2 is a judgment call and
+also escalates, but the build is still usable meanwhile.
+
 ---
 
 ## Phase 2 — credentials
@@ -227,7 +401,7 @@ pwsh -File scripts/hermes-apply.ps1
 **Success:** `installed` lines for `config.yaml` and `config.toml`. Any existing
 file is copied to `<name>.bak-<timestamp>` first.
 
-### Step 3.3 — Point the two MCP subprocess variables
+### Step 3.3 — Point the three MCP subprocess variables
 
 `config.yaml` names these by variable rather than by path, so the file stays
 portable between machines.
@@ -242,6 +416,13 @@ portable between machines.
   "$PWD\scripts\hermes-council-launch.cmd", 'User')
 [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON',
   (Get-Command python).Source, 'User')
+
+# codex-mcp: same launcher pattern, one runtime over. The supervisor substitutes
+# its own Node for a bare `command:` entry exactly as it did its own Python.
+[Environment]::SetEnvironmentVariable('HERMES_CODEX_LAUNCHER',
+  "$PWD\scripts\codex-mcp-launch.cmd", 'User')
+[Environment]::SetEnvironmentVariable('HERMES_CODEX_NODE',
+  (Get-Command node).Source, 'User')
 ```
 
 Confirm the interpreter you just pinned is the one that actually has the package:
@@ -260,7 +441,39 @@ Test-Path $env:LOCALAPPDATA\hermes\hermes-agent\venv\Scripts\python.exe
 Open a new shell before continuing — `SetEnvironmentVariable ... 'User'` does not
 affect the current one.
 
-### Step 3.4 — Restart the gateway
+### Step 3.4 — Install the ported skills
+
+`hermes-skills/` holds 29 Claude skills converted to Hermes format. They are what
+let this install carry work on its own rather than being a bare model router —
+research, security audit, investor material, the MAD Gambit context. Copying them
+is a separate step from `hermes-apply.ps1`, which installs two config files and
+nothing else.
+
+```powershell
+$dest = Join-Path $HOME '.hermes\skills'
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+Copy-Item -Path 'hermes-skills\*' -Destination $dest -Recurse -Force
+hermes skills list
+```
+
+**Success:** `hermes skills list` shows 31 skills across 12 categories — the eleven
+ported ones (`blockchain`, `software-development`, `security`, `research`, `finance`,
+`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`, `madhats`)
+plus **`operations`**.
+
+**`operations` is the one that matters for handing this build over.** The port
+deliberately drops Claude-surface skills, which was correct — they describe tools
+Hermes does not have — but nothing replaced them, leaving the agent with no skill
+that taught it to use `terminal`, `process` or `execute_code`, its actual local
+capabilities. `operations/local-desktop` covers those; `operations/hermes-orchestration`
+covers maintaining this routing build. Both are hand-written and have no upstream.
+
+Editing rule, and it differs by origin: the **ported** skills are regenerated by
+`scripts/port-skills-to-hermes.js`, so hand-edits there are lost on the next run.
+The `operations/` skills are written by hand and the script never touches them —
+edit those directly.
+
+### Step 3.5 — Restart the gateway
 
 ```powershell
 hermes gateway restart
@@ -278,10 +491,16 @@ Both were already failing before this runbook. Neither blocks the model tiers.
 ### Step 4.1 — hermes-council
 
 ```powershell
-& $env:HERMES_VENV_PYTHON -m hermes_council.server --help
+& $env:HERMES_COUNCIL_PYTHON -m hermes_council.server --help
 ```
 
 **Success:** help text.
+
+This used to read `$env:HERMES_VENV_PYTHON`, which step 3.3 above declares
+obsolete and never sets — so on a box that followed this runbook in order, the
+command ran with an empty interpreter path and failed for a reason that had
+nothing to do with `hermes_council`. `HERMES_COUNCIL_PYTHON` is the variable
+step 3.3 actually sets, and the one the launcher pins.
 
 **This was the blocker, and it is FIXED — the cause was not what it looked like.**
 The error was `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, which
@@ -310,22 +529,36 @@ was the obvious inference, and it was wrong.
 codex mcp list
 ```
 
-**Success:** a `hermes` entry with no `Unsupported`.
-**Known failure:** status `Unsupported`. The binary and the registration both
-exist, so this is a protocol-version mismatch, not a missing install. Note that
-`codex mcp-server` and the standalone `codex-mcp-server` binary were **removed**
-on 2026-09-05; the replacement is `codex app-server`, JSON-RPC 2.0 over
-stdio/websocket/unix socket. One official page still documents the removed tool —
-treat it as stale.
+**Expected output:** `Unsupported`. **That is the correct result. Do not escalate
+it, and do not try to repair it.**
 
-**ESCALATE.** Codex is reached as a subprocess through the bundled `codex` skill,
-so delegation still works while this is broken.
+`codex mcp-server` and the standalone `codex-mcp-server` binary were **removed**
+in Codex 0.154.0 on 2026-09-05. The replacement, `codex app-server`, speaks its
+own JSON-RPC 2.0 protocol and is not an MCP server — Codex is an MCP *client*
+now. There is no handshake left to succeed, so no configuration on this box can
+make this line pass. One official page still documents the removed tool; treat it
+as stale.
+
+This step is kept because the output is worth *recognising*. An earlier revision
+called it a blocker and `hermes-verify.ps1` raised a FAIL on it, which made the
+phase 6 gate unreachable on any machine with `codex` on PATH — a gate that can
+never go green stops being read, and then it hides the failures that are real.
+The verifier now warns instead.
+
+**Delegation is unaffected** and is proven separately at step 5.5. Hermes reaches
+Codex as a subprocess through the bundled `codex` skill, which never touches this
+interface.
+
+Do **not** "fix" this by setting `model.openai_runtime: codex_app_server`. That
+routes Hermes' own reasoning through Codex and creates a second, invisible
+consumer of the same ChatGPT 5-hour window — exactly what `openai-codex` sits in
+`excluded_providers` to prevent. See `docs/models/codex-handoff.md`.
 
 ---
 
 ## Phase 5 — prove the routing
 
-Four tests, one per tier. Run them in order.
+Five tests: one per tier, plus Codex delegation. Run them in order.
 
 ### Step 5.1 — Parent
 
@@ -336,9 +569,17 @@ hermes --print "Reply with exactly: parent-ok"
 **Success:** `parent-ok`, and `hermes` reports the model as
 `deepseek-ai/DeepSeek-V4-Pro`.
 
-**ESCALATE** if it answers on a different model. The likely cause is that the HF
-router does not serve a 1.6T model, in which case the parent moves to
-`or-fallback` — a config change, not a retry.
+**ESCALATE** if it answers on a different model — but **not** for the reason this
+step used to give. It said the likely cause was the HF router not serving a 1.6T
+model, and that has since been checked: the router serves
+`deepseek-ai/DeepSeek-V4-Pro` through four live inference providers (novita,
+featherless-ai, deepinfra, baseten). Coverage is not the problem.
+
+So a different model here means something else — a silent substitution by the
+router, a `discover_models` regression that unpinned the picker, or the parent
+falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
+`hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
+*returned* alongside the one requested.
 
 ### Step 5.2 — Delegation
 
@@ -366,6 +607,40 @@ hermes --print --model custom:local:hermes3:8b "Reply with exactly: floor-ok"
 ```
 
 **Success:** `floor-ok`, served with no network dependency.
+
+### Step 5.5 — Codex delegation
+
+The step that proves the path Hermes actually uses. Everything in this repo about
+Codex concerns the MCP bridge, which is dead upstream and does not matter;
+delegation runs the CLI as a **subprocess**, and nothing until now exercised it.
+
+```powershell
+codex login status
+```
+
+**Success:** exits 0. If not, `codex login` (browser OAuth against the ChatGPT
+plan — no separate billing), or set `CODEX_API_KEY` for metered per-token use.
+
+Then one real delegation, in a throwaway directory so nothing real is edited:
+
+```powershell
+$t = Join-Path $env:TEMP 'codex-smoke'
+New-Item -ItemType Directory -Path $t -Force | Out-Null
+Push-Location $t
+codex exec --json --sandbox workspace-write "Create hello.txt containing exactly: ready"
+Get-Content .\hello.txt
+Pop-Location
+```
+
+**Success:** a JSONL event stream on stdout, and `hello.txt` contains `ready`.
+
+**Failure looks like** a hang with no output — Codex is an interactive terminal
+app and needs a pty. From Hermes the bundled `codex` skill supplies that via
+`terminal(..., pty=true, background=true)`; see `docs/models/codex-handoff.md:93`.
+
+If it fails with `setting up uid map: Permission denied`, the sandbox cannot open
+in this context. `--sandbox danger-full-access` works **per call** — never as the
+config default.
 
 ---
 
@@ -396,9 +671,10 @@ divergence went unrecorded for three days and cost a session to rediscover.
 | Symptom | Owner | First move |
 |---|---|---|
 | Model answers but ignores tools | Sonnet | Wrong chat template — fix the Modelfile `TEMPLATE` |
-| Parent resolves to the wrong model | Sonnet | HF router likely does not serve V4-Pro; move parent to `or-fallback` |
-| `hermes mcp list` missing an entry | Nemotron | Re-run step 3.2, restart gateway, re-check once |
-| `ModuleNotFoundError: mcp.server.fastmcp` | Nemotron | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
-| `codex mcp list` says `Unsupported` | Sonnet | Protocol mismatch; `codex app-server` is the current interface |
+| Parent resolves to the wrong model | Sonnet | NOT router coverage — the HF router is confirmed to serve V4-Pro via 4 live providers. Check `HF_TOKEN`, `discover_models`, and the returned-vs-requested id from `-Deep` |
+| `hermes mcp list` missing an entry | VL runner | Re-run step 3.2, restart gateway, re-check once |
+| `ModuleNotFoundError: mcp.server.fastmcp` | VL runner | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
+| `codex mcp list` says `Unsupported` | **Nobody** | Expected and unfixable — the interface was removed upstream. Delegation is the subprocess path; prove it at step 5.5 |
+| A fallback/aux slot 404s on OpenRouter | Sonnet | OpenRouter ids are lowercase `deepseek/...`, not the Hugging Face `deepseek-ai/DeepSeek-...` form. Same model, different namespace |
 | Any key visible outside `.env` | **Human** | Rotate it first, then continue |
-| Ollama tag not found | Nemotron | Tag string must match `config.yaml` exactly; re-run step 1.4 |
+| Ollama tag not found | VL runner | Tag string must match `config.yaml` exactly; re-run step 1.4 |

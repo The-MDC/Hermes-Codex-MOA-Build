@@ -68,16 +68,29 @@ Install-One (Join-Path $repo 'configs\codex\config.toml')  (Join-Path $CodexHome
 
 Write-Host @"
 
-Two environment variables the config references by name, not value:
+Five environment variables the config references by name, not value:
 
-  HERMES_SKILLS_SERVER  full path to skills-mcp-server\dist\index.js
-  HERMES_VENV_PYTHON    full path to the Hermes venv's python.exe
+  HERMES_SKILLS_SERVER     full path to skills-mcp-server\dist\index.js
+  HERMES_COUNCIL_LAUNCHER  full path to scripts\hermes-council-launch.cmd
+  HERMES_COUNCIL_PYTHON    the interpreter that HAS hermes_council installed
+  HERMES_CODEX_LAUNCHER    full path to scripts\codex-mcp-launch.cmd
+  HERMES_CODEX_NODE        the node.exe the Codex shim should pin
 
-Set them for your user so Hermes resolves the two local MCP subprocesses:
+Set them for your user so Hermes resolves the local MCP subprocesses:
 
   [Environment]::SetEnvironmentVariable('HERMES_SKILLS_SERVER','<path>','User')
-  [Environment]::SetEnvironmentVariable('HERMES_VENV_PYTHON','<path>','User')
+  [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_LAUNCHER','<repo>\scripts\hermes-council-launch.cmd','User')
+  [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON',(Get-Command python).Source,'User')
+  [Environment]::SetEnvironmentVariable('HERMES_CODEX_LAUNCHER','<repo>\scripts\codex-mcp-launch.cmd','User')
+  [Environment]::SetEnvironmentVariable('HERMES_CODEX_NODE',(Get-Command node).Source,'User')
 
+NOT HERMES_VENV_PYTHON. This block used to name it, and pointing at the venv was
+the bug: the supervisor substitutes its own Python for a bare `command`, so the
+import ran where the packages were not. The launcher is indirection the
+supervisor cannot reach through, and HERMES_COUNCIL_PYTHON is what the launcher
+itself pins. hermes-verify.ps1 checks the launcher; nothing reads VENV_PYTHON.
+
+Open a new shell afterwards -- 'User' scope does not affect the current one.
 Then verify before routing any real work through it:
 
   pwsh -File scripts/hermes-verify.ps1

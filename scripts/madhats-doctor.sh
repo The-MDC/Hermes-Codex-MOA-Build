@@ -174,17 +174,12 @@ probe "https://github.com" "github.com"
 probe "https://registry.npmjs.org" "npm registry"
 probe "https://api.anthropic.com" "anthropic api"
 
-# -------------------------------------------------------- canonical numbers --
-hdr "canonical numbers"
-if [ -f scripts/check-canonical-numbers.js ]; then
-    if node scripts/check-canonical-numbers.js --quiet; then
-        ok "canonical numbers agree across all files that state them"
-    else
-        bad "canonical numbers disagree — run: node scripts/check-canonical-numbers.js"
-    fi
-else
-    warn "scripts/check-canonical-numbers.js not found"
-fi
+# The canonical-numbers group was removed with the owner's explicit approval,
+# together with scripts/check-canonical-numbers.js and the two CI steps that ran it.
+# Removing the script alone would NOT have been enough: the `else` branch here
+# warned when the file was absent, so a delete-only change would have made the
+# doctor complain about its own missing dependency on every run, forever.
+# The numbers remain canonical; CLAUDE.md remains their declaration.
 
 # ------------------------------------------------------------------ verdict --
 printf '\n'

@@ -1,0 +1,4 @@
+
+# python bytecode — the CI Syntax step runs py_compile over scripts/*.py
+__pycache__/
+*.pyc

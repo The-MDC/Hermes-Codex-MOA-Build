@@ -7,7 +7,8 @@ authoritative version does not rot the same way. Dated records still have a plac
 `handoff-2026-09-22.md` is a record of *what was reported on a day* and is annotated
 rather than edited — but "what is true now" belongs here, and only here.
 
-Last updated: 2026-09-22 · Branch: `claude/lucid-noether-0ui54b` · PR #13 (draft)
+Last updated: 2026-09-22 · Branch: `claude/lucid-noether-0ui54b` (reset from `The-MDC`
+after PR #13 merged) · PR #13 **merged**
 
 ---
 
@@ -26,13 +27,16 @@ Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.
 ## The architecture as committed
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro      1.6T / 49B active, 1M ctx
-subagents   custom:nvidia-nim    nemotron-3-super-120b-a12b       high-compute delegation
-fallback    custom:or-fallback   deepseek-ai/DeepSeek-V4.1-Flash  552B / 8B prefill, 16B decode
+parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       1.6T / 49B active, 1M ctx
+subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b high-compute delegation
+fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
 floor       custom:local         hermes3:8b + nemotron-nano:12b-v2 (Ollama)
 
+vision      custom:local-vl      nemotron-nano-12b-v2-vl           llama.cpp :8080, NOT Ollama
+
 auxiliary   5 slots -> hermes3:8b          routing, classification, titles, approval, curator
-            3 slots -> V4.1-Flash          compression, web_extract, vision
+            2 slots -> V4.1-Flash          compression, web_extract
+            1 slot  -> local-vl            vision
 moa         V4.1-Flash reference -> NIM Nemotron 120B aggregator
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
 ```
@@ -65,27 +69,32 @@ Three structural rules hold this together. Breaking any one fails **silently**:
 | No credential leakage | Ran with dummy keys in `.env`; zero occurrences in output |
 | `hermes-council` | **Fixed on the box.** Wrapper starts clean, no ModuleNotFoundError |
 | GitHub Actions | Green on all 7 commits, 6–12s each |
+| Port checks are now portable | **Resolved 2026-09-22.** `Test-NetConnection` is Windows-only and was listed here as a path that had never executed. Off Windows it did not fail cleanly — it threw `term not recognized` straight to stderr while the surrounding logic carried on. Replaced with a `TcpClient` helper that behaves identically everywhere, then exercised in a container against all three states: server up with the right alias (ok), server up with the wrong id (FAIL naming `--alias` as the fix), server down (FAIL) |
+| Cloudflare Workers disconnected | **Resolved 2026-09-22.** The integration was deleted by the repo owner. Verified rather than assumed: PR #13's head carried two check runs (`Workers Builds` failing in 0s, `harness checks`), PR #14's head carries **one** — `harness checks`, green, 12s. The `Workers Builds` run is absent, not merely passing. The red X frozen in #13's history does not clear: completed check runs are immutable |
 
 ## Assumed, NOT verified
 
 Be explicit about these. Each is the dangling-reference class that CI structurally
 cannot see.
 
-- **Whether the HF router serves `deepseek-ai/DeepSeek-V4-Pro`.** It is a 1.6T model;
-  router coverage at that size is not a given.
-- **Whether OpenRouter serves `deepseek-ai/DeepSeek-V4.1-Flash`.**
 - **Whether `nemotron-nano:12b-v2` is imported into Ollama**, and whether its chat
-  template produces real `tool_calls` rather than prose about calling a tool.
+  template produces real `tool_calls` rather than prose about calling a tool. The
+  GGUF source repo exists; the import is a local step nothing here can observe.
+- **Whether `hermes3:8b` is pulled on the box.** The registry has it (see the table
+  above); the disk is the open question.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** — taken from the handoff,
   never reachable from the build container. A wrong URL fails loudly; a wrong
   `tools.include` fails silently by filtering everything out.
-- **Windows-only code paths in the .ps1 scripts** (`Test-NetConnection`) have never
-  executed.
+- **Whether llama.cpp b6315+ actually loads this VL model with its projector.** The
+  GGUF and the mmproj both exist and `nemotron_h` is supported; the two together on
+  a real build is the part nothing here can exercise. It fails loudly if not.
 
-`pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep` answers the first three. It
-checks each provider's **catalog before the completion**, because a failed completion
-alone cannot distinguish a wrong model id from an exhausted quota, and those need
-opposite fixes.
+`pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep` now reads each provider's
+endpoint and model id **out of the installed config** rather than restating them, so
+the probe can no longer drift from what Hermes actually sends — which is how the
+OpenRouter id stayed wrong through a merge. It checks each provider's **catalog
+before the completion**, because a failed completion alone cannot distinguish a wrong
+model id from an exhausted quota, and those need opposite fixes.
 
 ---
 
@@ -110,38 +119,21 @@ variables. Rotation in the Render dashboard is the only thing that closes it.
 > Three files currently assert it needs rotating. If that stops being true, leaving
 > the assertion in place is exactly the staleness the 2026-09-22 audit cleaned up.
 
-### 2. Disconnect Cloudflare Workers from this repo
+**Answer it with `scripts/hermes-report.ps1`**, which exists because no session can
+see this machine:
 
-Attached some time after 2026-09-19 (PRs #11 and #12 have no such check, #13 does).
-Fails in **0 seconds**, before reading the repo, on every commit including docs-only
-ones. By 11:30 on 2026-09-22 it was retry-looping several builds per minute on one
-unchanged commit. **No repo change can fix a build that dies before reading the
-repo** — do not attempt one, and do not add a `wrangler.toml` to make it pass.
-
-**Cloudflare side** (touches only this Worker — prefer this if other The-MDC repos
-deploy to Cloudflare):
-
-```
-https://dash.cloudflare.com/d266f6c59a542bce7394fb28b7580327/workers/services/view/madhats-claude-enhancement/production/settings
+```powershell
+pwsh -File scripts/hermes-report.ps1
 ```
 
-→ **Settings → Build → Git repository → Disconnect**
+It inventories `$HERMES_HOME`, finds every `config.yaml.bak-*`, and reports **how
+many key-shaped strings each one contains and of what family** — never the value.
+That is the whole question: a backup with zero hits means nothing is exposed there,
+and one with a `rnd_` hit means rotate before deleting, because deleting a file does
+not un-expose what was in it. Its output is safe to paste back: values are never
+read into a variable, and every line is scrubbed of key shapes on the way out.
 
-That service URL is taken from the Cloudflare bot's own PR comments, so the account
-id and service name are verified. If the UI has moved `/settings`, drop the suffix
-and navigate from the service page.
-
-**GitHub side** (cleaner, but the App installation is org-wide):
-
-```
-https://github.com/organizations/The-MDC/settings/installations
-```
-
-→ **Cloudflare Workers and Pages → Configure** → remove `MADHATs-Claude-Enhancement`.
-
-The existing red X on PR #13 will **not** clear retroactively — completed check runs
-are immutable. Disconnecting stops it appearing on new commits.
-### 3. Run the quickstart on the Windows box
+### 2. Run the quickstart on the Windows box
 
 Everything in this repo is config and scripts; none of it is exercised until someone
 runs it. `docs/models/VSCODE-QUICKSTART.md`, then
@@ -151,17 +143,29 @@ runs it. `docs/models/VSCODE-QUICKSTART.md`, then
 
 ## Open, in priority order
 
-1. **Codex bridge `Unsupported`.** `codex mcp list` reports it. The binary and the
-   registration both exist, so it is a protocol mismatch: `codex mcp-server` and the
-   standalone binary were removed 2026-09-05, replaced by `codex app-server`
-   (JSON-RPC 2.0). **Not urgent** — Hermes reaches Codex as a subprocess via the
-   bundled `codex` skill, which does not use this interface. Verify delegation works
-   before spending time here. `scripts/hermes-blockers.ps1` diagnoses without changing
-   anything.
-2. **Verify the two DeepSeek model ids** (see "Assumed" above).
-3. **Tool-calling test for both local models.** The step that catches a wrong chat
+1. **Tool-calling test for both local models.** The step that catches a wrong chat
    template. Skipping it means finding out later, via degraded tool use that looks
-   like a model quality problem.
+   like a model quality problem. `VSCODE-QUICKSTART.md` §2.6 — run it for
+   `hermes3:8b` too, not just the heavy model: it carries five auxiliary slots, so
+   its tool calling matters more.
+2. **Codex delegation, once.** `TAKEOVER.md` step 5.5. Nothing has ever exercised
+   the path Hermes actually uses.
+
+**Closed, and why — so neither gets reopened:**
+
+- ~~Codex bridge `Unsupported`~~. **Not a defect and not repairable.** Codex 0.154.0
+  removed the `codex mcp-server` entry point on 2026-09-05; `codex app-server`
+  speaks its own JSON-RPC 2.0 and is not an MCP server. Codex is an MCP *client*
+  now, so there is no handshake left to succeed and no local configuration can make
+  that line pass. Hermes' own built-in `codex` MCP preset has the same stale
+  reference — an open upstream issue, not something this repo caused. Delegation is
+  the subprocess path and is unaffected. `hermes-verify.ps1` now **warns** rather
+  than failing here; it used to `Fail`, which made the phase 6 gate unreachable on
+  any box with `codex` on PATH. Do not repair it by setting
+  `model.openai_runtime: codex_app_server` — that is the second-consumer-of-one-quota
+  problem `excluded_providers` exists to prevent.
+- ~~Verify the two DeepSeek model ids~~. Done — see the table above. One was wrong
+  and is fixed.
 
 ---
 
@@ -188,6 +192,36 @@ because none was run here.
 negative-tested. The PowerShell step has a `>=3` count guard so an under-matching glob
 cannot pass vacuously.
 
+**A check that cannot PASS is worse.** `hermes-verify.ps1` raised a `Fail` on
+`codex mcp list` reporting `Unsupported` — a permanent upstream condition. So the
+final gate in `TAKEOVER.md` phase 6, `OK no failures`, was unreachable on any machine
+with `codex` installed. A gate nobody can satisfy stops being read, and then it hides
+the failures that are real. It also contradicted `hermes-blockers.ps1`, which already
+recommended doing nothing about it. Demoted to a warning that says why.
+
+**A model id belongs to the GATEWAY, not to the model.** `or-fallback` sent
+`deepseek-ai/DeepSeek-V4.1-Flash` — the Hugging Face repo id — to OpenRouter, which
+names the same weights `deepseek/deepseek-v4.1-flash`. Nothing catches this: CI
+resolves provider *references*, not the ids inside them; `discover_models: false`
+stops Hermes probing `/models`; and a dead reference resolves to the main model
+rather than erroring. It killed the 429 escape, `compression`, `web_extract` and
+`vision` at once, silently. The id had been copied from the model card, which is
+exactly the intuitive and wrong thing to do.
+
+**Two copies of one fact will drift, and the copy in the checker is the dangerous
+one.** `hermes-verify.ps1` restated all three model ids as literals, so the probe
+could report green on an id Hermes would never send — or red on one it would. It now
+reads them out of the installed config. Anything that verifies a value should read
+that value from where the system reads it, never hold its own copy.
+
+**An egress limit in one container is not a fact about sessions.** Both the PR #13
+body and this file recorded the two DeepSeek ids as unverifiable from any session,
+because that build container got 403 on `openrouter.ai` and could not reach
+`huggingface.co`. Three of the four resolved immediately from a session with the
+Hugging Face MCP connector attached — connectors do not go through the same egress
+path as `curl`. Before recording something as structurally impossible, check whether
+it is merely blocked on one route.
+
 **Assertions that encode a topology rot into false confidence.** Two CI rules had to
 be rewritten because they asserted an implementation (`127.0.0.1`, then `not
 nvidia-nim`) rather than the requirement (a different bucket from the parent). The
@@ -198,10 +232,20 @@ in use — guarding nothing while looking green.
 
 ## Repo conventions
 
-- Develop on `claude/lucid-noether-0ui54b`. PR #13 tracks it.
-- CI is `harness checks`. The Workers check is the known-bad one; ignore it.
-- Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) are
-  asserted by CI against `CLAUDE.md` and must not change without explicit approval.
+- Develop on `claude/lucid-noether-0ui54b`. **PR #13 is merged**, so that branch was
+  reset from `The-MDC` rather than continued — a merged PR cannot track new work, and
+  stacking on merged commits re-proposes them. Follow-up work opens a NEW PR.
+- CI is `harness checks`, and as of 2026-09-22 it is the **only** check. The
+  Cloudflare `Workers Builds` check that used to fail in 0s on every commit was
+  disconnected; if it ever reappears, the integration has been re-attached and the
+  fix is again on the Cloudflare or GitHub-App side, never in this repo.
+- Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) still
+  need explicit approval to change, and `CLAUDE.md` is still their only declaration.
+  **CI no longer enforces that.** The gate and `scripts/check-canonical-numbers.js`
+  were removed with the owner's explicit approval; agreement is now a reviewer's
+  checkbox in `.github/PULL_REQUEST_TEMPLATE.md`. Nothing automated will catch a
+  drifted restatement, and a drifted one reads exactly as plausibly as the correct
+  figure — so check a restatement against `CLAUDE.md`, never against memory.
 - No key-shaped string may enter `config.yaml`; CI and the preflight both reject it.
 - Verify before claiming. Several statements in this repo's history were plausible,
   confidently written, and wrong.
