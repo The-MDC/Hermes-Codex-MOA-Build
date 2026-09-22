@@ -18,6 +18,16 @@
 #>
 [CmdletBinding()]
 param(
+    # Which bring-up phase to check. The stack comes up in stages, and a stage
+    # gate that fails on something the NEXT stage installs is a gate nobody can
+    # pass -- so each stage only requires what it was supposed to deliver.
+    #
+    #   a     hermes3:8b only. The minimal working floor.
+    #   b     adds nemotron-nano:12b-v2 and the Codex bridge.
+    #   full  everything, including the hosted MCP servers. (default)
+    [ValidateSet('a', 'b', 'full')]
+    [string]$Stage = 'full',
+
     # Also make one live request per remote provider. Costs a few tokens and
     # proves the key works, which no local check can.
     [switch]$Deep
@@ -31,6 +41,9 @@ function Section($t) { Write-Host "`n$t" -ForegroundColor Cyan }
 function Ok($m)      { Write-Host "  ok    $m" -ForegroundColor Green }
 function Warn($m)    { Write-Host "  warn  $m" -ForegroundColor Yellow; $script:Warn++ }
 function Fail($m)    { Write-Host "  FAIL  $m" -ForegroundColor Red;    $script:Fail++ }
+function Info($m)    { Write-Host "  ..    $m" -ForegroundColor DarkGray }
+
+Write-Host "verifying stage '$Stage'" -ForegroundColor Cyan
 
 $HermesHome = if ($env:HERMES_HOME) { $env:HERMES_HOME }
               else { Join-Path $env:LOCALAPPDATA 'hermes' }
@@ -50,6 +63,7 @@ else { Fail 'ollama not on PATH - the local tier and 5 auxiliary slots have no b
 
 $codex = Get-Command codex -ErrorAction SilentlyContinue
 if ($codex) { Ok "codex: $((& codex --version 2>&1 | Select-Object -First 1))" }
+elseif ($Stage -eq 'a') { Info 'codex not on PATH - not required until stage b' }
 else { Warn 'codex not on PATH - delegation to Codex will fail, everything else is fine' }
 
 # ---------------------------------------------------------------- config
@@ -98,10 +112,20 @@ Section 'local models (Ollama)'
 
 if ($ollama) {
     $tags = (& ollama list 2>&1 | Out-String)
-    # These two names must match `providers.local.models` in the repo config.
+    # These names must match `providers.local.models` in the repo config exactly.
+    # A tag mismatch is not a loud failure: Hermes resolves the miss by falling
+    # back to the main model, so you get an answer from the wrong tier.
+    #
+    # Stage a ships hermes3:8b alone, so the heavier model is only REQUIRED from
+    # stage b onward. It is still reported at stage a, as information.
+    $required = if ($Stage -eq 'a') { @('hermes3:8b') }
+                else { @('hermes3:8b', 'nemotron-nano:12b-v2') }
     foreach ($m in @('hermes3:8b', 'nemotron-nano:12b-v2')) {
         if ($tags -match [regex]::Escape($m)) { Ok "$m present" }
-        else { Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back" }
+        elseif ($m -in $required) {
+            Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back"
+        }
+        else { Info "$m not present yet - not required until stage b" }
     }
 
     $port = Test-NetConnection -ComputerName '127.0.0.1' -Port 11434 `
@@ -115,8 +139,13 @@ Section 'MCP servers'
 
 if ($hermes) {
     $mcpOut = (& hermes mcp list 2>&1 | Out-String)
-    foreach ($s in @('voicebox', 'crawl4ai', 'atomicmemory', 'hermes-skills',
-                     'hermes-council', 'cloudflare', 'submcp')) {
+    $expected = switch ($Stage) {
+        'a'  { @('crawl4ai', 'atomicmemory') }
+        'b'  { @('crawl4ai', 'atomicmemory', 'hermes-skills') }
+        default { @('voicebox', 'crawl4ai', 'atomicmemory', 'hermes-skills',
+                    'hermes-council', 'cloudflare', 'submcp') }
+    }
+    foreach ($s in $expected) {
         if ($mcpOut -match [regex]::Escape($s)) { Ok "$s registered" }
         else { Warn "$s not listed by 'hermes mcp list'" }
     }

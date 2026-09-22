@@ -7,11 +7,11 @@
 #
 #       1. The key is absent, stale, or scoped to a different account. Hermes reports
 #          this as a model error deep in a session, not as a config error at startup.
-#       2. The traffic does not land on NVIDIA at all. `moonshotai/kimi-k3` is also an
-#          OpenRouter catalog slug, and Hermes has an open bug (#39753) where a matching
-#          model name overrides an explicit custom base_url. The symptom is a working
-#          session billed to the wrong provider, with your NVIDIA key sent to a third
-#          party. Nothing in the transcript says so.
+#       2. The traffic does not land on NVIDIA at all. Hermes has an open bug (#39753)
+#          where a model name that ALSO exists in the OpenRouter catalog overrides an
+#          explicit custom base_url. The symptom is a working session billed to the
+#          wrong provider, with your NVIDIA key sent to a third party. Nothing in the
+#          transcript says so; the response-header check below is what catches it.
 #       3. The endpoint does not support what the config assumes — tool calling, the
 #          context window, the reasoning_effort knob. Hermes finds out mid-task.
 #
@@ -47,10 +47,10 @@ bad()  { printf '  %sFAIL%s  %s\n' "$RED" "$RST" "$*"; FAILED=$((FAILED+1)); }
 hdr()  { [ "$QUIET" = 1 ] || printf '\n%s%s%s\n' "$DIM" "$*" "$RST"; }
 
 NIM_BASE="${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
-NIM_MODEL="${NVIDIA_NIM_MODEL:-moonshotai/kimi-k3}"
+NIM_MODEL="${NVIDIA_NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
 HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
-LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:8080/v1}"
+LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:11434/v1}"
 SEARXNG="${SEARXNG_URL:-}"
 VOICEBOX="${VOICEBOX_BASE_URL:-http://127.0.0.1:17493}"
 ATOMICMEM="${ATOMICMEMORY_API_URL:-http://127.0.0.1:17350}"
@@ -176,7 +176,7 @@ if u:
           % (u.get("prompt_tokens","?"), u.get("completion_tokens","?"), u.get("total_tokens","?")))
 msg = (d.get("choices") or [{}])[0].get("message") or {}
 if msg.get("reasoning_content"):
-    print("reasoning_content present — K3 is thinking; budget tokens for it")
+    print("reasoning_content present — the model is thinking; budget tokens for it")
 PY
                 [ "$QUIET" = 1 ] || printf '  %s      %s%s\n' "$DIM" "$l" "$RST"
             done
@@ -250,8 +250,9 @@ if [ "$CODE" = "200" ]; then
         ok "the endpoint emitted tool_calls — Hermes' tools will work"
     else
         warn "200, but no tool_calls in the reply. The model may have answered in prose."
-        printf '        Re-run before concluding tools are unsupported; K3 sometimes reasons\n'
-        printf '        its way to a text answer. If it never calls, Hermes tools are degraded.\n'
+        printf '        Re-run before concluding tools are unsupported; a reasoning model\n'
+        printf '        sometimes talks its way to a text answer instead. If it NEVER calls,\n'
+        printf '        Hermes tool use is degraded on this tier.\n'
     fi
 elif [ "$CODE" = "429" ]; then
     warn "tool-calling probe: 429 — rate limited, not a capability result"
@@ -261,8 +262,11 @@ fi
 
 # ------------------------------------------------------------- other buckets --
 #
-# The parent runs on NIM. The subagent tier and the 429 fallback deliberately do
-# NOT — they sit on separate providers so a rate limit on one cannot starve the
+# The PARENT runs on the HF router and NIM carries the SUBAGENTS. That is the
+# reverse of the layout this script was first written against, which is why the
+# section headers below say "parent bucket" over the Hugging Face check.
+#
+# The tiers sit on separate providers so a rate limit on one cannot starve the
 # others. That only holds if those providers actually answer, so check them here.
 #
 # A tier that is configured but unreachable is the quiet failure: Hermes falls back
@@ -287,8 +291,8 @@ check_bucket() {   # name  base_url  key_value  purpose
 }
 
 if [ "$NIM_ONLY" = "0" ]; then
-    hdr "subagent bucket — Hugging Face Inference ($HF_BASE)"
-    check_bucket "hf-router" "$HF_BASE" "${HF_TOKEN:-}" "the subagent tier"
+    hdr "parent bucket — Hugging Face Inference ($HF_BASE)"
+    check_bucket "hf-router" "$HF_BASE" "${HF_TOKEN:-}" "the parent tier"
 
     hdr "fallback bucket — OpenRouter ($OR_BASE)"
     check_bucket "openrouter" "$OR_BASE" "${OPENROUTER_API_KEY:-}" "the 429 fallback"
@@ -301,7 +305,7 @@ if [ "$NIM_ONLY" = "0" ]; then
     #
     # The one tier nothing can rate-limit. Absent is fine — it is a floor, not a
     # dependency — so this warns rather than fails.
-    hdr "local floor — Hermes-4-14B ($LOCAL_BASE)"
+    hdr "local floor — Ollama ($LOCAL_BASE)"
     CODE=$(curl -sS -o "$TMP/local.json" -w '%{http_code}' --max-time 5 \
         "$LOCAL_BASE/models" 2>/dev/null) || CODE="000"
     if [ "$CODE" = "200" ]; then
@@ -316,8 +320,8 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
         fi
     else
         warn "local server not reachable (HTTP $CODE) — no offline floor"
-        printf '        Start one:  llama-server -m Hermes-4-14B-Q6_K.gguf --port 8080 --jinja\n'
-        printf '        See docs/models/local-floor.md. Everything else still works.\n'
+        printf '        Start one:  ollama serve      then: ollama pull hermes3:8b\n'
+        printf '        See docs/models/TAKEOVER.md phase A. Everything else still works.\n'
     fi
 
     # --------------------------------------------------------- web browsing --
