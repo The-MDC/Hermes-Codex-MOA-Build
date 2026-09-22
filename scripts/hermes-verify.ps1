@@ -167,19 +167,60 @@ if ($codex) {
 if ($Deep) {
     Section 'endpoints (live, one request each)'
 
+    # Keys live in $HERMES_HOME\.env, which Hermes reads at runtime -- they are
+    # NOT normally exported into an interactive shell. Reading only the process
+    # environment meant -Deep skipped every probe on a correctly configured box
+    # and reported it as "not set", which looks like a finding and is not one.
+    function Get-ProviderKey($keyVar) {
+        $v = [Environment]::GetEnvironmentVariable($keyVar)
+        if ($v) { return $v }
+        if (Test-Path $EnvPath) {
+            foreach ($line in Get-Content $EnvPath) {
+                if ($line -match "^\s*$([regex]::Escape($keyVar))\s*=\s*(.+?)\s*$") {
+                    return $Matches[1].Trim('"').Trim("'")
+                }
+            }
+        }
+        return $null
+    }
+
+    # Two questions, and one request cannot answer both. A failed completion looks
+    # identical whether the model id is wrong or the account is out of quota, so
+    # the catalog is checked FIRST: it isolates "this id does not exist here",
+    # which is the failure this repo keeps hitting and CI cannot see.
     function Probe($name, $url, $keyVar, $model) {
-        $key = [Environment]::GetEnvironmentVariable($keyVar)
-        if (-not $key) { Warn "$name skipped - $keyVar not in this shell's environment"; return }
+        $key = Get-ProviderKey $keyVar
+        if (-not $key) { Warn "$name skipped - $keyVar not in the environment or $EnvPath"; return }
+        $auth = @{ Authorization = "Bearer $key" }
+
+        try {
+            $cat = Invoke-RestMethod -Method Get -Uri "$url/models" -Headers $auth -TimeoutSec 30
+            $ids = @($cat.data | ForEach-Object { $_.id })
+            if ($ids -contains $model) {
+                Ok "$name catalog lists '$model' ($($ids.Count) models visible to this key)"
+            } else {
+                Fail "$name catalog does NOT list '$model' - the id is wrong for this provider, not a quota problem ($($ids.Count) models visible)"
+                $near = @($ids | Where-Object { $_ -match 'deepseek|nemotron' } | Select-Object -First 5)
+                if ($near) { Info "closest ids here: $($near -join ', ')" }
+            }
+        } catch {
+            Warn "$name catalog unreadable: $($_.Exception.Message)"
+        }
+
         try {
             $body = @{ model = $model
                        messages = @(@{ role = 'user'; content = 'ping' })
                        max_tokens = 1 } | ConvertTo-Json -Depth 5
             $r = Invoke-RestMethod -Method Post -Uri "$url/chat/completions" `
-                    -Headers @{ Authorization = "Bearer $key" } `
-                    -ContentType 'application/json' -Body $body -TimeoutSec 30
-            # Echo the id the endpoint returns, not the one we asked for: they
-            # differ when a router silently substitutes a model.
-            Ok "$name served '$($r.model)'"
+                    -Headers $auth -ContentType 'application/json' `
+                    -Body $body -TimeoutSec 60
+            # Echo the id the endpoint RETURNED, not the one we asked for: a router
+            # that silently substitutes a model is invisible any other way.
+            if ($r.model -and $r.model -ne $model) {
+                Warn "$name answered as '$($r.model)', NOT the '$model' we asked for - silent substitution"
+            } else {
+                Ok "$name served '$($r.model)'"
+            }
         } catch {
             Fail "$name did not answer for '$model': $($_.Exception.Message)"
         }

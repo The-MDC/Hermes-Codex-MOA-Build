@@ -68,6 +68,41 @@ jobs:
           [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
           [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
 
+      # The PowerShell scripts were unverified for three commits, because the
+      # container they were written in has no pwsh and the Syntax step above only
+      # globs *.sh and *.js. They are the scripts that install config onto a real
+      # machine and the ones a takeover depends on, so "unchecked" was the wrong
+      # place for them. ubuntu-latest ships pwsh, so this costs nothing.
+      #
+      # ParseFile against the real PowerShell AST parser, not a regex: it is the
+      # same front end pwsh itself uses, so a file that passes here cannot fail to
+      # parse on the Windows box. It does NOT prove the script behaves correctly --
+      # only that it is syntactically whole.
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem scripts -Filter *.ps1 | Sort-Object Name
+          if ($files.Count -lt 3) {
+              Write-Error "expected >=3 PowerShell scripts, found $($files.Count)"
+              exit 1
+          }
+          $bad = 0
+          foreach ($f in $files) {
+              $errors = $null; $tokens = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $f.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors -and $errors.Count) {
+                  Write-Host "FAIL  $($f.Name): $($errors.Count) parse error(s)"
+                  foreach ($e in $errors) {
+                      Write-Host ("      line {0}: {1}" -f $e.Extent.StartLineNumber, $e.Message)
+                  }
+                  $bad++
+              } else {
+                  Write-Host "ok    $($f.Name) ($($tokens.Count) tokens)"
+              }
+          }
+          if ($bad) { exit 1 }
+
       # The Hermes config is data, not code: nothing in this repo executes it, so a
       # syntax error would surface only on the desktop that copies it into
       # ~/.hermes/config.yaml — where a malformed file makes Hermes fall back to its
