@@ -91,17 +91,61 @@ opposite fixes.
 
 ## Needs a human — cannot be done from a session
 
-1. **Rotate the Render bearer token.** An earlier deployed `config.yaml` carried it
-   inline. It persists in shell history and in four `config.yaml.bak-*` files.
-   Disabling the MCP entry did not un-expose it. Rotation is the only fix.
-2. **Disconnect Cloudflare Workers from this repo.** Attached after 2026-09-19; fails
-   in 0 seconds on every commit including docs-only ones; retry-looping by 11:30.
-   Nothing in the repo can fix a build that dies before reading the repo.
-   Dashboard: account `d266f6c59a542bce7394fb28b7580327`, service
-   `madhats-claude-enhancement` → Settings → Build → Git repository → Disconnect.
-   Or revoke the GitHub App's access at the org installations page.
-3. **Run the quickstart on the Windows box.** Everything above is config and scripts;
-   none of it is exercised until someone runs it.
+### 1. Rotate the Render bearer token
+
+An earlier deployed `config.yaml` carried it **inline**. The MCP entry is now
+disabled and absent from the committed config — but **disabling is not rotating**,
+and the two are unrelated. Disabling stops Hermes *using* the server. The credential
+is still readable in:
+
+- shell history on the box
+- the four `config.yaml.bak-*` files listed in `handoff-2026-09-22.md`
+- any Hermes gateway log that captured the config at startup
+
+A Render bearer token is account-level API access — services, deploys, environment
+variables. Rotation in the Render dashboard is the only thing that closes it.
+
+> If the token was never live, or the box is single-user and the `.bak-*` files and
+> history have been cleared, then this is done — **say so and remove this item.**
+> Three files currently assert it needs rotating. If that stops being true, leaving
+> the assertion in place is exactly the staleness the 2026-09-22 audit cleaned up.
+
+### 2. Disconnect Cloudflare Workers from this repo
+
+Attached some time after 2026-09-19 (PRs #11 and #12 have no such check, #13 does).
+Fails in **0 seconds**, before reading the repo, on every commit including docs-only
+ones. By 11:30 on 2026-09-22 it was retry-looping several builds per minute on one
+unchanged commit. **No repo change can fix a build that dies before reading the
+repo** — do not attempt one, and do not add a `wrangler.toml` to make it pass.
+
+**Cloudflare side** (touches only this Worker — prefer this if other The-MDC repos
+deploy to Cloudflare):
+
+```
+https://dash.cloudflare.com/d266f6c59a542bce7394fb28b7580327/workers/services/view/madhats-claude-enhancement/production/settings
+```
+
+→ **Settings → Build → Git repository → Disconnect**
+
+That service URL is taken from the Cloudflare bot's own PR comments, so the account
+id and service name are verified. If the UI has moved `/settings`, drop the suffix
+and navigate from the service page.
+
+**GitHub side** (cleaner, but the App installation is org-wide):
+
+```
+https://github.com/organizations/The-MDC/settings/installations
+```
+
+→ **Cloudflare Workers and Pages → Configure** → remove `MADHATs-Claude-Enhancement`.
+
+The existing red X on PR #13 will **not** clear retroactively — completed check runs
+are immutable. Disconnecting stops it appearing on new commits.
+### 3. Run the quickstart on the Windows box
+
+Everything in this repo is config and scripts; none of it is exercised until someone
+runs it. `docs/models/VSCODE-QUICKSTART.md`, then
+`pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep`.
 
 ---
 
