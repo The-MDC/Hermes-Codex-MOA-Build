@@ -25,13 +25,17 @@ the Cloudflare and Render dashboard pages — a text-only runner sees none of it
 because none of it arrives on stdout. Several success lines in this file describe
 exactly those things. Hand the VL model a screenshot and it can check them.
 
-**It reads and reports; it does not execute.** This model was imported from a bare
-GGUF with no `TEMPLATE` directive, so its tool-calling convention is unverified —
-the same risk `VSCODE-QUICKSTART.md` §2.6 exists to catch on the other local models,
-and a wrong template degrades tool use while ordinary chat looks perfect. Commands
-stay in the shell a human or the harness drives. If you want this model driving
-execution, run the §2.6 tool-calling probe against it first and treat a pass as the
-precondition, not an assumption.
+**It reads and reports; it does not execute — until step 1.8 says otherwise.** This
+model was imported from a bare GGUF with no `TEMPLATE` directive, so its tool-calling
+convention is unverified, and a wrong template degrades tool use while ordinary chat
+looks perfect. Commands stay in the shell a human or the harness drives.
+
+**Step 1.8 is the gate that lifts this.** It runs two probes against :8080 — one that
+the model genuinely sees an image, one that it emits real `tool_calls` — and its
+outcome table says which of the three roles this runner may actually hold. Do not
+promote it to driving execution on the strength of ordinary chat looking fine; that
+is exactly what a wrong template hides. (`VSCODE-QUICKSTART.md` §2.6 is the equivalent
+probe for the two **Ollama** models on :11434; it does not cover this one.)
 
 **The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
 `llama-server` on `127.0.0.1:8080`, and step 1.7 is what starts it. Before that it
@@ -247,6 +251,94 @@ missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
 is natively multimodal and is what fixed the slot originally. One line, no loss
 except offline capability.
 
+### Step 1.8 — Prove the VL model SEES and CALLS TOOLS
+
+Two probes, and they answer two different questions. Run both.
+
+The division-of-labour table scopes the VL runner to **read, compare and report** —
+not to execute commands — precisely because its tool calling is unproven. This step
+is what lifts that restriction, or confirms it should stay.
+
+**Probe 1 — does it actually see?** The whole reason for this tier. A VL model served
+without its projector loads fine and answers about images from the text alone.
+
+```powershell
+Add-Type -AssemblyName System.Drawing
+$bmp = New-Object System.Drawing.Bitmap 64,64
+$g = [System.Drawing.Graphics]::FromImage($bmp)
+$g.Clear([System.Drawing.Color]::White)
+$g.FillEllipse([System.Drawing.Brushes]::Red, 8, 8, 48, 48)
+$g.Dispose()
+$ms = New-Object System.IO.MemoryStream
+$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
+$b64 = [Convert]::ToBase64String($ms.ToArray())
+$bmp.Dispose(); $ms.Dispose()
+
+$body = @{
+  model = 'nemotron-nano-12b-v2-vl'
+  messages = @(@{
+    role = 'user'
+    content = @(
+      @{ type='text'; text='What colour is the shape? Answer with one word.' },
+      @{ type='image_url'; image_url=@{ url="data:image/png;base64,$b64" } }
+    )
+  })
+  max_tokens = 10
+} | ConvertTo-Json -Depth 12
+
+(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
+  -ContentType 'application/json' -Body $body).choices[0].message.content
+```
+
+**Success:** the reply says **red**.
+
+**Failure looks like** a refusal, a description of something that is not there, or a
+guess like "blue" — all of which mean the projector is not attached. Restart
+`llama-server` and confirm `--mmproj` is on the command line and points at the
+`...mmproj.gguf` file, not at the model. This is the failure that `ollama create`
+produces silently, and it is why this tier is not an Ollama tag.
+
+**Probe 2 — does it emit real `tool_calls`?**
+
+```powershell
+$body = @{
+  model = 'nemotron-nano-12b-v2-vl'
+  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
+  tools = @(@{
+    type = 'function'
+    function = @{
+      name = 'get_weather'
+      description = 'Get current weather for a city'
+      parameters = @{
+        type = 'object'
+        properties = @{ city = @{ type='string' } }
+        required = @('city')
+      }
+    }
+  })
+} | ConvertTo-Json -Depth 10
+
+(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
+  -ContentType 'application/json' -Body $body).choices[0].message | ConvertTo-Json -Depth 10
+```
+
+**Success:** a `tool_calls` array naming `get_weather`.
+
+**Failure looks like** prose about the weather, or prose *describing* the tool it
+would call. Both mean the chat template is wrong — the GGUF was imported with no
+`TEMPLATE` directive, so whatever the file embeds is what you get.
+
+**What each outcome means for the role:**
+
+| Probe 1 | Probe 2 | The VL runner |
+|---|---|---|
+| red | `tool_calls` | Can read, compare, report **and drive execution**. Lift the restriction |
+| red | prose | Reads and reports only, as the table already says. Usable — this is the expected case until a template is fixed |
+| wrong | either | **Not usable for vision at all.** `--mmproj` is missing or wrong; fix that before anything else |
+
+**ESCALATE** on a probe-1 failure. A template fix for probe 2 is a judgment call and
+also escalates, but the build is still usable meanwhile.
+
 ---
 
 ## Phase 2 — credentials
@@ -357,12 +449,22 @@ Copy-Item -Path 'hermes-skills\*' -Destination $dest -Recurse -Force
 hermes skills list
 ```
 
-**Success:** `hermes skills list` shows the ported categories — `blockchain`,
-`software-development`, `security`, `research`, `finance`, `creative`, `devops`,
-`productivity`, `media`, `autonomous-ai-agents`, `madhats`.
+**Success:** `hermes skills list` shows 31 skills across 12 categories — the eleven
+ported ones (`blockchain`, `software-development`, `security`, `research`, `finance`,
+`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`, `madhats`)
+plus **`operations`**.
 
-Do not hand-edit anything under `hermes-skills/`; it is generated by
-`scripts/port-skills-to-hermes.js` and the next run overwrites edits.
+**`operations` is the one that matters for handing this build over.** The port
+deliberately drops Claude-surface skills, which was correct — they describe tools
+Hermes does not have — but nothing replaced them, leaving the agent with no skill
+that taught it to use `terminal`, `process` or `execute_code`, its actual local
+capabilities. `operations/local-desktop` covers those; `operations/hermes-orchestration`
+covers maintaining this routing build. Both are hand-written and have no upstream.
+
+Editing rule, and it differs by origin: the **ported** skills are regenerated by
+`scripts/port-skills-to-hermes.js`, so hand-edits there are lost on the next run.
+The `operations/` skills are written by hand and the script never touches them —
+edit those directly.
 
 ### Step 3.5 — Restart the gateway
 
