@@ -165,6 +165,62 @@ it would call. Both mean the template is wrong.
 **ESCALATE** on failure. The fix is a `TEMPLATE` directive in the Modelfile, and
 choosing it is a judgment call.
 
+### Step 1.7 — Local vision: llama.cpp, NOT Ollama
+
+**Do not try to do this with Ollama.** A VL GGUF ships as two files — the language
+model and a separate `mmproj` projector — and Ollama's Modelfile cannot attach the
+second one. Two `FROM` lines error, `ADAPTER` does not work
+([ollama#14730](https://github.com/ollama/ollama/issues/14730),
+[ollama#9967](https://github.com/ollama/ollama/issues/9967)).
+
+The failure mode is why this warning is here: **`ollama create` succeeds**, silently
+dropping the projector. You get a model with `-VL` in its name that cannot see —
+the same silent capability loss that `vision: auto` already caused once.
+
+Download both files (≈10.5 GB total):
+
+```powershell
+hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
+  --include '*Q5_K_M*.gguf' '*mmproj*.gguf' `
+  --local-dir "$HOME\Models\nemotron-nano-12b-v2-vl"
+```
+
+**Success:** two files — `...VL-Q5_K_M.gguf` at about **8.77 GB** and
+`...VL-BF16-mmproj.gguf` at about **1.69 GB**. The projector is not quantized and
+there is only one; if you have only the first file, vision will not work.
+
+Then serve both. Requires **llama.cpp b6315 or later** — that is where `nemotron_h`,
+this model's hybrid Mamba-Transformer architecture, became supported. An older build
+refuses to load rather than degrading, which is the good failure.
+
+```powershell
+$m = "$HOME\Models\nemotron-nano-12b-v2-vl"
+llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
+             --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
+             --alias nemotron-nano-12b-v2-vl `
+             --host 127.0.0.1 --port 8080
+```
+
+**`--alias` is load-bearing.** Without it llama-server names the model after its
+file path, `config.yaml`'s `local-vl.default_model` stops matching, and
+`hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+
+**Success:**
+
+```powershell
+(Invoke-RestMethod http://127.0.0.1:8080/v1/models).data.id
+```
+
+prints exactly `nemotron-nano-12b-v2-vl`.
+
+Leave it running. The `vision` auxiliary slot routes here, so a stopped server is a
+missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
+
+**If you would rather not run a second local service,** revert `vision` in
+`config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`. That model
+is natively multimodal and is what fixed the slot originally. One line, no loss
+except offline capability.
+
 ---
 
 ## Phase 2 — credentials

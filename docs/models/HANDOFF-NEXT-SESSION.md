@@ -32,8 +32,11 @@ subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b high-compute 
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
 floor       custom:local         hermes3:8b + nemotron-nano:12b-v2 (Ollama)
 
+vision      custom:local-vl      nemotron-nano-12b-v2-vl           llama.cpp :8080, NOT Ollama
+
 auxiliary   5 slots -> hermes3:8b          routing, classification, titles, approval, curator
-            3 slots -> V4.1-Flash          compression, web_extract, vision
+            2 slots -> V4.1-Flash          compression, web_extract
+            1 slot  -> local-vl            vision
 moa         V4.1-Flash reference -> NIM Nemotron 120B aggregator
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
 ```
@@ -66,6 +69,7 @@ Three structural rules hold this together. Breaking any one fails **silently**:
 | No credential leakage | Ran with dummy keys in `.env`; zero occurrences in output |
 | `hermes-council` | **Fixed on the box.** Wrapper starts clean, no ModuleNotFoundError |
 | GitHub Actions | Green on all 7 commits, 6–12s each |
+| Port checks are now portable | **Resolved 2026-09-22.** `Test-NetConnection` is Windows-only and was listed here as a path that had never executed. Off Windows it did not fail cleanly — it threw `term not recognized` straight to stderr while the surrounding logic carried on. Replaced with a `TcpClient` helper that behaves identically everywhere, then exercised in a container against all three states: server up with the right alias (ok), server up with the wrong id (FAIL naming `--alias` as the fix), server down (FAIL) |
 | Cloudflare Workers disconnected | **Resolved 2026-09-22.** The integration was deleted by the repo owner. Verified rather than assumed: PR #13's head carried two check runs (`Workers Builds` failing in 0s, `harness checks`), PR #14's head carries **one** — `harness checks`, green, 12s. The `Workers Builds` run is absent, not merely passing. The red X frozen in #13's history does not clear: completed check runs are immutable |
 
 ## Assumed, NOT verified
@@ -81,8 +85,9 @@ cannot see.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** — taken from the handoff,
   never reachable from the build container. A wrong URL fails loudly; a wrong
   `tools.include` fails silently by filtering everything out.
-- **Windows-only code paths in the .ps1 scripts** (`Test-NetConnection`) have never
-  executed.
+- **Whether llama.cpp b6315+ actually loads this VL model with its projector.** The
+  GGUF and the mmproj both exist and `nemotron_h` is supported; the two together on
+  a real build is the part nothing here can exercise. It fails loudly if not.
 
 `pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep` now reads each provider's
 endpoint and model id **out of the installed config** rather than restating them, so

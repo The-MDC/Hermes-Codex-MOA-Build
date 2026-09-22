@@ -315,9 +315,25 @@ subagents   nvidia-nim    Nemotron-3-Super-120B  API only
 fallback    or-fallback   DeepSeek-V4.1-Flash    API only, also 2 heavy aux slots
 floor       local         hermes3:8b             5 aux slots, offline-capable
             local         nemotron-nano:12b-v2   heavier local work
+vision      local-vl      nemotron-nano-12b-v2-vl  NOT SET UP BY THIS FILE
 ```
 
 Not covered here, deliberately: the seven MCP servers, `hermes-council`'s
 dependency fault, and the Codex bridge handshake. None of them gate the model
 tiers. `scripts\hermes-blockers.ps1` diagnoses the last two without changing
 anything, and `TAKEOVER.md` phases 3–6 cover the rest.
+
+**Nor is the vision tier — and that one shows up as a failure.** `config.yaml`
+routes `vision` to a `local-vl` provider served by **llama.cpp on :8080**, not by
+Ollama. Ollama cannot attach the `mmproj` projector a VL model needs, and it fails
+by silently dropping vision rather than refusing, so `ollama create` would leave
+you a model with `-VL` in its name that cannot see. `TAKEOVER.md` step 1.7 sets it
+up properly.
+
+Until you do, `hermes-verify.ps1` FAILs on port 8080. That failure is accurate
+rather than noise: the vision slot genuinely has no backend. Every other tier
+works around it.
+
+If you would rather not run a second local service, revert `vision` in
+`config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`, which is
+natively multimodal and is what fixed that slot originally. One line.

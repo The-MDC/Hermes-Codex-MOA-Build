@@ -24,6 +24,13 @@
 #   fallback    OpenRouter     DeepSeek-V4.1-Flash       552B, 8B/16B active, 1M ctx
 #   floor       your laptop    hermes3:8b (Ollama)       support, routing, memory
 #               (same tier)    nemotron-nano:12b-v2      heavier local work
+#   vision      your laptop    nemotron-nano-12b-v2-vl   llama.cpp :8080, NOT Ollama
+#
+# THE VISION TIER IS A SEPARATE SERVER ON PURPOSE. Ollama cannot attach the mmproj
+# projector a VL GGUF needs, and it fails by silently dropping vision rather than
+# refusing, so the model would load and simply not see. llama.cpp's llama-server
+# takes --mmproj and speaks the same OpenAI-compatible /v1. See the `local-vl`
+# entry for the full reasoning and the one-line revert to cloud vision.
 #
 # THE INVARIANT IS "a different rate-limit bucket from the parent." It is NOT
 # "subagents must avoid NIM" — that was the old rule, and it encoded the old
@@ -216,6 +223,50 @@ providers:
     # either model's native window. Raise it only as far as RAM tolerates.
     context_length: 32768
 
+  local-vl:
+    name: "llama.cpp (this machine, vision)"
+    # WHY A SECOND LOCAL SERVER RATHER THAN A SECOND OLLAMA TAG.
+    #
+    # Ollama cannot serve this model's vision. A VL GGUF ships as TWO files -- the
+    # language model and a separate mmproj projector -- and Ollama's Modelfile has
+    # no way to attach the second one. Two `FROM` lines error; `ADAPTER` does not
+    # work. See ollama/ollama#14730 and #9967.
+    #
+    # The failure mode is the dangerous one: `ollama create` SUCCEEDS, silently
+    # dropping the projector, and you get a model with `-VL` in its name that
+    # cannot see. That is the same silent capability loss as leaving `vision` on
+    # `auto` -- the bug this config already had once -- arriving by a new route.
+    #
+    # llama.cpp's llama-server takes --mmproj and speaks OpenAI-compatible /v1, so
+    # it slots in here as an ordinary provider. Different PORT from Ollama, which
+    # also satisfies the CI assertion that no two providers share a host.
+    #
+    #   llama-server -m  <path>\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf `
+    #                --mmproj <path>\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf `
+    #                --alias nemotron-nano-12b-v2-vl --host 127.0.0.1 --port 8080
+    #
+    # --alias IS LOAD-BEARING. Without it llama-server names the model after the
+    # file path, the id below stops matching, and hermes-verify's catalog check
+    # fails on an id mismatch that looks like a wrong model. Pin it to this string.
+    api: http://127.0.0.1:8080/v1
+    # Loopback, so no key. Same exemption as the Ollama entry above.
+    api_key: "no-key-required"
+    transport: chat_completions
+    default_model: nemotron-nano-12b-v2-vl
+    models:
+      - nemotron-nano-12b-v2-vl
+    discover_models: false
+    # 8.77 GB for Q5_K_M plus 1.69 GB for the BF16 projector -- the projector is not
+    # quantized, and there is only one. Budget ~10.5 GB before KV.
+    #
+    # Requires llama.cpp b6315 or later: that is where `nemotron_h`, the hybrid
+    # Mamba-Transformer architecture this model uses, became supported. An older
+    # build refuses to load it rather than degrading, which is the good failure.
+    #
+    # Held well below the model's native window: images consume context fast, and
+    # KV is what runs a laptop out of memory, not the weights.
+    context_length: 16384
+
 model:
   # Named-provider form. Routes by provider key rather than by model-name
   # detection — the detection path has an open bug where a model name matching
@@ -337,6 +388,7 @@ web:
 #   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
 #   /model custom:local:hermes3:8b
 #   /model custom:local:nemotron-nano:12b-v2
+#   /model custom:local-vl:nemotron-nano-12b-v2-vl      (needs llama-server on :8080)
 # ---------------------------------------------------------------------------
 excluded_providers:
   - openrouter
@@ -538,11 +590,33 @@ auxiliary:
   # `auto` has been resolving image work to a model that cannot see, and Hermes
   # reports that as a bad answer rather than as a missing capability.
   #
-  # V4.1-Flash is multimodal natively, so naming it here is what gives the stack
-  # a vision backend for the first time since the parent changed.
+  # NOW ON THE LOCAL VL SERVER, which is a deliberate trade, not an upgrade on
+  # every axis. Read both halves before changing it.
+  #
+  # What it buys: vision that survives losing the network, costs nothing per
+  # image, and cannot be rate-limited. The three cloud tiers all fail together on
+  # no network; this one does not.
+  #
+  # What it costs: an operational dependency. llama-server must be RUNNING. If it
+  # is not, this slot fails -- where the cloud route only failed when OpenRouter
+  # did. hermes-verify.ps1 checks port 8080 for exactly this reason.
+  #
+  # REVERTING IS ONE LINE. Put this back to:
+  #     provider: "custom:or-fallback"
+  #     model: deepseek/deepseek-v4.1-flash
+  # DeepSeek-V4.1-Flash is natively multimodal (pipeline tag image-text-to-text)
+  # and was what fixed this slot originally. It remains the right answer if you do
+  # not want a second local service.
+  #
+  # WHAT IS NOT AN OPTION is leaving this on `auto`. The parent, DeepSeek-V4-Pro,
+  # is text-generation only -- confirmed against its model card, which describes
+  # two "language models" and has no vision encoder. `auto` resolved image work to
+  # a model that cannot see, and Hermes reported that as a bad answer rather than
+  # a missing capability. Note the asymmetry that hid it: the SMALLER fallback is
+  # the multimodal one, so nobody thinks to check the bigger parent.
   vision:
-    provider: "custom:or-fallback"
-    model: deepseek/deepseek-v4.1-flash
+    provider: "custom:local-vl"
+    model: nemotron-nano-12b-v2-vl
   title_generation:
     provider: "custom:local"
     model: hermes3:8b

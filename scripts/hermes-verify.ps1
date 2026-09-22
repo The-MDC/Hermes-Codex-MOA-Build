@@ -117,6 +117,29 @@ if (-not (Test-Path $EnvPath)) {
     }
 }
 
+# Portable TCP reachability check.
+#
+# REPLACES Test-NetConnection, which is Windows-only. HANDOFF-NEXT-SESSION.md lists
+# it under "Assumed, NOT verified" as a code path that has never executed -- and off
+# Windows it does not fail cleanly, it throws "term not recognized" straight to
+# stderr while the surrounding logic carries on. TcpClient ships with .NET core and
+# behaves identically on every platform, so these two checks can now be exercised in
+# a container and in CI rather than only on the target box. One fewer assumption.
+function Test-Port($hostname, $port, $timeoutMs = 2000) {
+    try {
+        $client = [System.Net.Sockets.TcpClient]::new()
+        $async  = $client.BeginConnect($hostname, $port, $null, $null)
+        $opened = $async.AsyncWaitHandle.WaitOne($timeoutMs, $false)
+        if ($opened) {
+            # WaitOne returning true only means the wait ended; EndConnect is what
+            # distinguishes an accepted connection from a refused one.
+            try { $client.EndConnect($async) } catch { $opened = $false }
+        }
+        $client.Close()
+        return $opened
+    } catch { return $false }
+}
+
 # ---------------------------------------------------------------- local models
 Section 'local models (Ollama)'
 
@@ -138,10 +161,62 @@ if ($ollama) {
         else { Info "$m not present yet - not required until stage b" }
     }
 
-    $port = Test-NetConnection -ComputerName '127.0.0.1' -Port 11434 `
-                -InformationLevel Quiet -WarningAction SilentlyContinue
+    $port = Test-Port '127.0.0.1' 11434
     if ($port) { Ok 'Ollama answering on 127.0.0.1:11434' }
     else { Fail 'nothing listening on 127.0.0.1:11434 - run `ollama serve`' }
+}
+
+# ------------------------------------------------- local vision (llama.cpp)
+# Only checked when the config actually declares the provider, so an install that
+# reverted `vision` to the cloud route does not get told off about a server it
+# deliberately does not run.
+#
+# The model id is read from the config rather than written here, for the same
+# reason the Deep probes are: two copies of one fact drift, and the copy in the
+# checker is the one that reports green on something Hermes never sends.
+# Read the config fresh rather than reusing $raw from the config section: that
+# variable is only assigned when the file exists, and depending on it here would
+# make this block's behaviour hinge on whether an earlier branch ran.
+$vlCfg = if (Test-Path $ConfigPath) { Get-Content $ConfigPath -Raw } else { $null }
+if ($vlCfg -and $vlCfg -match '(?m)^\s{2}local-vl\s*:') {
+    Section 'local vision (llama.cpp)'
+
+    $vlModel = $null
+    $inBlock = $false
+    foreach ($line in ($vlCfg -split '\r?\n')) {
+        if ($line -match '^\s{2}local-vl\s*:\s*$') { $inBlock = $true; continue }
+        if ($inBlock) {
+            if ($line -match '^\s{0,2}\S') { break }
+            if ($line -match '^\s{4}default_model\s*:\s*(\S+)\s*$') { $vlModel = $Matches[1]; break }
+        }
+    }
+    if (-not $vlModel) {
+        Fail 'local-vl is declared but its default_model could not be read from config.yaml'
+    }
+
+    $vlPort = Test-Port '127.0.0.1' 8080
+    if (-not $vlPort) {
+        # FAIL rather than Warn: `vision` routes here, so a stopped server is a
+        # missing capability, and Hermes surfaces that as a bad answer about an
+        # image rather than as an error. That confusion is the whole reason this
+        # tier exists as its own server.
+        Fail 'nothing listening on 127.0.0.1:8080 - vision routes here, so it is DOWN. Start llama-server with --mmproj (see configs/hermes/config.yaml, local-vl)'
+    } else {
+        Ok 'llama-server answering on 127.0.0.1:8080'
+        try {
+            $vlCat = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/models' -TimeoutSec 15
+            $vlIds = @($vlCat.data | ForEach-Object { $_.id })
+            if ($vlIds -contains $vlModel) {
+                Ok "llama-server serves '$vlModel'"
+            } else {
+                # Almost always a missing --alias: llama-server otherwise names the
+                # model after its file path, which will not match the config.
+                Fail "llama-server does NOT serve '$vlModel' - it reports: $($vlIds -join ', '). Start it with --alias $vlModel"
+            }
+        } catch {
+            Warn "llama-server catalog unreadable: $($_.Exception.Message)"
+        }
+    }
 }
 
 # ---------------------------------------------------------------- MCP

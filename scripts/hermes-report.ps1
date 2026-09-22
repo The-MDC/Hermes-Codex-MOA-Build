@@ -239,6 +239,27 @@ if (-not (Have 'ollama')) {
     }
 }
 
+# ------------------------------------------------------- local vision tier
+Head 'local vision (llama.cpp :8080)'
+$vlDeclared = $false
+$installed = Join-Path $HermesHome 'config.yaml'
+if (Test-Path $installed) {
+    $vlDeclared = (Get-Content $installed -Raw) -match '(?m)^\s{2}local-vl\s*:'
+}
+if (-not $vlDeclared) {
+    Say '  local-vl not declared in the installed config - vision is on the cloud route'
+} else {
+    try {
+        $vl = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/models' -TimeoutSec 5
+        Say ("  answering. serves: {0}" -f (@($vl.data | ForEach-Object { $_.id }) -join ', '))
+        Say '  (must read exactly nemotron-nano-12b-v2-vl, else --alias is missing)'
+    } catch {
+        Say '  NOT ANSWERING on 127.0.0.1:8080 - the vision slot has no backend.'
+        Say '  Start llama-server with BOTH the model and --mmproj; see TAKEOVER.md 1.7.'
+        Say '  Ollama cannot serve this: it drops the mmproj projector silently.'
+    }
+}
+
 # ------------------------------------------------------------------- codex
 Head 'Codex'
 if (-not (Have 'codex')) {
