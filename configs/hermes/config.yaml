@@ -126,9 +126,27 @@ providers:
     # NO BENCHMARK FIGURES ARE QUOTED HERE. The previous entry carried measured
     # numbers (BFCL-V4, MMMU-Pro) for a DIFFERENT model; they were deleted rather
     # than carried across, because a benchmark belongs to the model it was run on.
-    default_model: deepseek-ai/DeepSeek-V4.1-Flash
+    #
+    # THE ID BELOW IS OPENROUTER'S, NOT HUGGING FACE'S. Do not "correct" it to
+    # match the model card. Same model, two namespaces:
+    #
+    #   Hugging Face   deepseek-ai/DeepSeek-V4.1-Flash    <- the hf-router form
+    #   OpenRouter     deepseek/deepseek-v4.1-flash       <- what THIS tier sends
+    #
+    # This entry carried the Hugging Face form for its whole life. OpenRouter serves
+    # nothing under that name, and `discover_models: false` means Hermes never
+    # probes /models to find out -- it sends the id and takes the 404. Four things
+    # died with it and none of them errored visibly: the 429 escape hatch,
+    # `compression` (which REWRITES conversation history), `web_extract`, and
+    # `vision` -- the slot that was repaired in the same change that shipped this.
+    #
+    # The parent's id two providers up is DIFFERENT ON PURPOSE: the HF router
+    # really does take the Hugging Face form. The rule is not "use lowercase", it
+    # is "each gateway names models in its own namespace" -- so an id copied from
+    # one provider to another is wrong by default, and this is the proof.
+    default_model: deepseek/deepseek-v4.1-flash
     models:
-      - deepseek-ai/DeepSeek-V4.1-Flash
+      - deepseek/deepseek-v4.1-flash
     discover_models: false
     # Held at the parent's window rather than the architectural million, for the
     # same reason: raise it to what the endpoint advertises, not the model card.
@@ -212,7 +230,7 @@ fallback_providers:
   # A 429 or an outage on the parent falls through to a different provider rather
   # than stopping.
   - provider: custom
-    model: deepseek-ai/DeepSeek-V4.1-Flash
+    model: deepseek/deepseek-v4.1-flash
     base_url: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
   # Last resort, and the only entry that survives losing the network. Much smaller
@@ -316,7 +334,7 @@ web:
 # Switching mid-session, with the names as they now stand:
 #   /model custom:hf-router:deepseek-ai/DeepSeek-V4-Pro
 #   /model custom:nvidia-nim:nvidia/nemotron-3-super-120b-a12b
-#   /model custom:or-fallback:deepseek-ai/DeepSeek-V4.1-Flash
+#   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
 #   /model custom:local:hermes3:8b
 #   /model custom:local:nemotron-nano:12b-v2
 # ---------------------------------------------------------------------------
@@ -510,10 +528,10 @@ mcp_servers:
 auxiliary:
   compression:
     provider: "custom:or-fallback"
-    model: deepseek-ai/DeepSeek-V4.1-Flash
+    model: deepseek/deepseek-v4.1-flash
   web_extract:
     provider: "custom:or-fallback"
-    model: deepseek-ai/DeepSeek-V4.1-Flash
+    model: deepseek/deepseek-v4.1-flash
   # VISION WAS BROKEN, and silently. This slot was left on `auto` back when the
   # parent was Kimi-K3, which had vision. The parent is now DeepSeek-V4-Pro, whose
   # pipeline tag is text-generation: text in, text out, no image path at all. So
@@ -524,7 +542,7 @@ auxiliary:
   # a vision backend for the first time since the parent changed.
   vision:
     provider: "custom:or-fallback"
-    model: deepseek-ai/DeepSeek-V4.1-Flash
+    model: deepseek/deepseek-v4.1-flash
   title_generation:
     provider: "custom:local"
     model: hermes3:8b

@@ -10,20 +10,23 @@
     1. hermes-council raises ModuleNotFoundError: No module named 'mcp.server.fastmcp'
     2. codex mcp list reports the bridge as Unsupported
 
-  Diagnoses by default and changes nothing. -Fix applies ONLY the council
-  dependency repair, which is the one with a mechanical answer. The Codex
-  handshake is deliberately never auto-fixed: the interface it needs was removed
-  upstream, so the repair is a design decision, not an install.
+  DIAGNOSES ONLY. Changes nothing, and there is no -Fix.
+
+  A -Fix switch used to be declared and advertised here, and no code path ever
+  read it: passing it did nothing, silently. An option that is documented but
+  inert is worse than no option, because the reader believes a repair was
+  attempted. It is removed rather than implemented, because neither blocker has
+  a mechanical answer worth automating -- the council fault is an interpreter to
+  PIN (the script prints the exact SetEnvironmentVariable line to paste), and the
+  Codex handshake cannot be repaired at all: the interface it wants was removed
+  upstream, so the decision is which of three options to take, not which command
+  to run.
 
 .EXAMPLE
   pwsh -File scripts/hermes-blockers.ps1
-  pwsh -File scripts/hermes-blockers.ps1 -Fix
 #>
-[CmdletBinding(SupportsShouldProcess)]
-param(
-    # Apply the council dependency repair. Does not touch Codex.
-    [switch]$Fix
-)
+[CmdletBinding()]
+param()
 
 $ErrorActionPreference = 'Continue'
 

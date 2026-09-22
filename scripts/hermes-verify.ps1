@@ -84,11 +84,21 @@ if (-not (Test-Path $ConfigPath)) {
 
     # An inline key here would be committed-shaped and is the repo's one hard rule.
     # Match the shape, never print the match.
+    $keyLeak = $false
     foreach ($shape in @('nvapi-[A-Za-z0-9_\-]{20,}', 'hf_[A-Za-z0-9]{30,}',
                          'sk-or-v1-[A-Za-z0-9]{20,}')) {
-        if ($raw -match $shape) { Fail "config.yaml contains something shaped like a live key - rotate it, then move it to .env" }
+        if ($raw -match $shape) {
+            Fail "config.yaml contains something shaped like a live key - rotate it, then move it to .env"
+            $keyLeak = $true
+        }
     }
-    if ($script:Fail -eq 0) { Ok 'no key-shaped string in config.yaml' }
+    # Gated on THIS scan, not on $script:Fail. It used to read
+    # `if ($script:Fail -eq 0)`, so any unrelated earlier failure -- `hermes` not
+    # on PATH is enough -- silently swallowed the clean result. A security check
+    # that goes quiet for a reason having nothing to do with security is worse
+    # than one that is simply absent: the reader sees no line and cannot tell
+    # whether it passed, failed, or never ran.
+    if (-not $keyLeak) { Ok 'no key-shaped string in config.yaml' }
 
     # Render carried an inline bearer token in an earlier revision of this file.
     if ($raw -match '(?m)^\s{2}render\s*:') {
@@ -164,12 +174,35 @@ if ($hermes) {
     } else { Ok 'council launcher present' }
 }
 
-if ($codex) {
+# The Codex MCP bridge. WARN, not FAIL, and the demotion is the point.
+#
+# `Unsupported` here is PERMANENT and not a fault of this install. Codex 0.154.0
+# removed the `codex mcp-server` entry point on 2026-09-05; the replacement,
+# `codex app-server`, speaks its own JSON-RPC 2.0 protocol and is not an MCP
+# server. Codex is an MCP *client* now. No handshake exists to succeed.
+#
+# This used to raise Fail, which made the whole script unpassable: TAKEOVER.md
+# phase 6.1 asks for `OK no failures` as the final gate, and on any box with
+# codex on PATH that verdict could never be reached. A gate that cannot go green
+# stops being read -- and then it hides the failures that ARE real. Worse, this
+# script contradicted scripts/hermes-blockers.ps1, which already recommends
+# option (a): do nothing, because delegation does not use this interface.
+#
+# Hermes reaches Codex as a SUBPROCESS via the bundled `codex` skill
+# (docs/models/codex-handoff.md). That path is unaffected and is the supported
+# one. Do not "fix" this by setting model.openai_runtime: codex_app_server --
+# that routes Hermes' own reasoning through Codex and creates a second, invisible
+# consumer of the same ChatGPT 5-hour window, which is exactly what
+# `openai-codex` sits in excluded_providers to prevent.
+#
+# Gated on stage because line 26 says codex is not required until stage b, and
+# this check ran at stage a regardless.
+if ($codex -and $Stage -ne 'a') {
     $codexOut = (& codex mcp list 2>&1 | Out-String)
     if ($codexOut -match '(?i)unsupported') {
-        Fail 'codex mcp list reports Unsupported - the bridge is registered but the handshake fails (protocol version mismatch, not a missing install)'
+        Warn 'codex mcp list reports Unsupported - EXPECTED. The interface was removed upstream (Codex 0.154.0, 2026-09-05); Codex is MCP-client-only now. Delegation runs as a subprocess and is unaffected. Not a blocker, and not fixable here'
     } elseif ($codexOut -match 'hermes') { Ok 'codex bridge handshake OK' }
-    else { Warn 'no hermes entry in codex mcp list' }
+    else { Warn 'no hermes entry in codex mcp list - delegation uses the subprocess path, so this is informational' }
 }
 
 # ---------------------------------------------------------------- endpoints
@@ -235,9 +268,54 @@ if ($Deep) {
         }
     }
 
-    Probe 'hf-router'   'https://router.huggingface.co/v1'     'HF_TOKEN'           'deepseek-ai/DeepSeek-V4-Pro'
-    Probe 'nvidia-nim'  'https://integrate.api.nvidia.com/v1'  'NVIDIA_API_KEY'     'nvidia/nemotron-3-super-120b-a12b'
-    Probe 'or-fallback' 'https://openrouter.ai/api/v1'         'OPENROUTER_API_KEY' 'deepseek-ai/DeepSeek-V4.1-Flash'
+    # Read the endpoint and the model id OUT OF THE CONFIG BEING VERIFIED rather
+    # than restating them here. THIS IS THE FIX FOR A BUG THIS FILE SHIPPED.
+    #
+    # These three lines used to carry literals. One of them probed OpenRouter for
+    # `deepseek-ai/DeepSeek-V4.1-Flash` -- the Hugging Face repo id, which
+    # OpenRouter does not serve under that name. Correcting config.yaml alone would
+    # have left this script still probing the old id and reporting green; correcting
+    # this script alone would have left Hermes still sending the wrong one. Two
+    # copies of one fact, and either can be fixed without the other.
+    #
+    # So there is one copy now, and it is the one Hermes actually reads.
+    #
+    # Deliberately NOT a YAML parser. It reads two scalars out of a known block
+    # shape and FAILS when it cannot find them. Falling back to a literal on a parse
+    # miss would rebuild the exact hazard this replaces -- and a silent fallback is
+    # the bug class this whole file exists to catch.
+    function Get-ProviderField($provider, $field) {
+        $lines = Get-Content $ConfigPath
+        $start = -1
+        for ($i = 0; $i -lt $lines.Count; $i++) {
+            if ($lines[$i] -match "^\s{2}$([regex]::Escape($provider))\s*:\s*$") { $start = $i; break }
+        }
+        if ($start -lt 0) { return $null }
+        for ($i = $start + 1; $i -lt $lines.Count; $i++) {
+            # A key at column 0 or 2 ends this provider's block. Everything that
+            # belongs to it -- including its comments -- is indented 4.
+            if ($lines[$i] -match '^\s{0,2}\S') { break }
+            if ($lines[$i] -match "^\s{4}$([regex]::Escape($field))\s*:\s*(\S+)\s*$") {
+                return $Matches[1]
+            }
+        }
+        return $null
+    }
+
+    function Probe-Configured($name, $keyVar) {
+        $url   = Get-ProviderField $name 'api'
+        $model = Get-ProviderField $name 'default_model'
+        if (-not $url -or -not $model) {
+            Fail "could not read providers.$name (api / default_model) from $ConfigPath - refusing to guess; a probe against a guessed id proves nothing"
+            return
+        }
+        Info "$name -> $model @ $url"
+        Probe $name $url $keyVar $model
+    }
+
+    Probe-Configured 'hf-router'   'HF_TOKEN'
+    Probe-Configured 'nvidia-nim'  'NVIDIA_API_KEY'
+    Probe-Configured 'or-fallback' 'OPENROUTER_API_KEY'
 }
 
 # ---------------------------------------------------------------- verdict

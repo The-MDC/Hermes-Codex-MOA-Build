@@ -290,7 +290,7 @@ need opposite fixes.
 
 **This is the step that answers the one thing CI structurally cannot:** whether
 `deepseek-ai/DeepSeek-V4-Pro` is actually served by the HF router, and whether
-`deepseek-ai/DeepSeek-V4.1-Flash` is actually on OpenRouter. Neither was
+`deepseek/deepseek-v4.1-flash` is actually on OpenRouter. Neither was
 verifiable from the build container.
 
 Three outcomes, three different meanings:
