@@ -8,10 +8,11 @@ whether editing one is safe.
 script rewrites `SKILL.md` in place and your change is gone.
 
 **Hand-written** — everything under `operations/`. These have no upstream to port
-from, because they describe Hermes' *own* tools and this repo's *own* build. The port
-script writes only the skills in its manifest and never deletes anything, so these
-survive a re-run — but that is a property of how the script works, not a guarantee
-anyone wrote down before. Edit these directly; there is nowhere else to edit them.
+from, because they describe Hermes' *own* tools and this repo's *own* build, so the copy
+here **is** the canonical source. The port script reads it and never rewrites it — a
+regeneration of a file from itself is a slow way to lose it — and it writes only the
+skills in its manifest, never deleting. Both properties are now asserted rather than
+assumed. Edit these directly; there is nowhere else to edit them.
 
 ## Why `operations/` exists
 
@@ -51,6 +52,50 @@ hermes skills list          # confirm they registered
 | autonomous-ai-agents | `skill-creator` |
 | madhats | `mad-gambit-ai-agents` · `mad-gambit-context` |
 | **operations** (hand-written) | `local-desktop` · `hermes-orchestration` |
+
+## Kept up to date
+
+A ported skill used to be stamped `version: 1.0.0` with nothing recording which upstream
+revision it came from, so "is this current?" had no answer. `.port-lock.json` answers it:
+per skill, the source root it resolved from, the SHA-256 of the upstream `SKILL.md` at
+port time, the port date, and the surfaces it was written to.
+
+```bash
+node scripts/port-skills-to-hermes.js --check     # writes nothing
+```
+
+| Line | Meaning | What to do |
+|---|---|---|
+| `current` | upstream `SKILL.md` unchanged since the port | nothing |
+| `DRIFTED` | upstream changed | re-run the port |
+| `RESURFACED` | `capabilities.yaml` changed surfaces since the port | re-run the port |
+| `absent` | source root not on this machine | nothing; normal off the porting box |
+| `unlocked` | in the manifest, never ported here | re-run the port where the source exists |
+
+**Drift never fails a build.** The sources live outside this repo — `security-audit`
+needs a Cloudflare clone no CI runner has — so gating on drift would be a check that can
+never pass. The first real run of this machinery found one: upstream had rewritten
+`media/pptx`'s routing guidance, and the ported copy had been stale with nothing
+reporting it.
+
+Entries are **merged**, not replaced. A port run on a machine missing one source root
+must not erase that skill's record, so an entry it could not re-resolve is carried over.
+
+## Two surfaces, one source
+
+`capabilities.yaml` decides which surfaces carry a skill; the port script obeys it.
+Hermes resolves a skill by its **directory** name, Claude Code by the frontmatter
+**`name`** in a flat `.claude/skills/<category>/<name>.md`. A skill declaring
+`surfaces: [claude, hermes]` is written to both from one source — that is how
+`operations/local-desktop` and `operations/hermes-orchestration`, written so the local
+tier could take the handoff, stopped being invisible to the model instructing it.
+
+The Claude copy is stamped `generated_by:`, and **only a stamped file is ever
+overwritten**. 76 of the 78 pre-existing files under `.claude/skills/` are Claude-native
+with no upstream in this repo; replacing one would destroy the only copy. The nine that
+share a name with a ported skill are reported as `NOT OVERWRITTEN` on every run, which is
+the expected steady state rather than an error. To hand one over to generation, delete it
+— the next run writes it stamped and owns it after.
 
 ## Why these and not the other 25
 

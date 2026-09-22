@@ -1,15 +1,8 @@
 ---
 name: hermes-orchestration
 description: "Use this skill when working on the Hermes routing build itself: changing config.yaml, adding or renaming a provider, moving an auxiliary slot, bringing the stack up on a new machine, or diagnosing why a tier answers on the wrong model, costs more than expected, or silently stopped working. Also use it before editing any model id, because each gateway names models in its own namespace and an id copied between providers is wrong by default. Triggers on: config.yaml, provider, auxiliary slot, routing, fallback, hermes-verify, hermes-apply, hermes-blockers, model id, wrong model, rate limit, 429, compression, vision slot, llama-server, Ollama tag, MCP server, bring the stack up."
-version: 1.0.0
-author: "MADHATs — written for this Hermes build"
-license: "MIT"
-platforms: [linux, macos, windows]
-metadata:
-  hermes:
-    tags: [Orchestration, Routing, Config, Providers, Diagnostics, Maintenance]
-    category: operations
-    related_skills: [local-desktop]
+generated_by: scripts/port-skills-to-hermes.js
+canonical_source: hermes-skills/operations/hermes-orchestration/SKILL.md
 ---
 
 # Maintaining this orchestration build
