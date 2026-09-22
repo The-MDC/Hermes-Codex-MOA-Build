@@ -1,3 +1,9 @@
+---
+name: investor-pitch
+description: Create MADHATs Gambit investor materials — pitch decks, hotsheets, one-pagers, term sheets, VC outreach emails, investor Q&A, due diligence docs, financial projections and cap tables. Reads the canonical numbers before producing anything, because a wrong fee in a deck is a wrong fee in front of an investor.
+origin: MADHATs
+---
+
 # Skill: Investor Pitch Materials — MADHATs Gambit
 
 ## When to Use This Skill

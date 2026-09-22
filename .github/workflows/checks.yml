@@ -77,6 +77,17 @@ jobs:
           # nothing — but it has to track the real count, or the removal itself turns CI red.
           [ "$js_count" -ge 1 ] || { echo "expected >=1 node script, found $js_count"; exit 1; }
 
+          # Python is checked too, because check-capabilities.py would otherwise be the only
+          # script in scripts/ that nothing parses. It is Python rather than Node because the
+          # registry is YAML and Node has no YAML parser without adding a dependency to a
+          # repo that deliberately has none -- while CI already runs python3 with PyYAML for
+          # the Hermes config block below.
+          py_count=0
+          for f in scripts/*.py; do
+            echo "python3 -m py_compile $f"; python3 -m py_compile "$f"; py_count=$((py_count+1))
+          done
+          [ "$py_count" -ge 1 ] || { echo "expected >=1 python script, found $py_count"; exit 1; }
+
       # The PowerShell scripts were unverified for three commits, because the
       # container they were written in has no pwsh and the Syntax step above only
       # globs *.sh and *.js. They are the scripts that install config onto a real
@@ -388,6 +399,27 @@ jobs:
                 "subprocess" + (" | configs/codex/config.toml: no custom route"
                 if os.path.exists(codex_toml) else " | configs/codex/config.toml: absent"))
           PY
+
+      # Capabilities were DUPLICATED across two surfaces rather than shared, and the
+      # duplicates diverged with nothing reporting it: 78 skills under .claude/skills/,
+      # 31 under hermes-skills/, nine names in common. Two skills written so the local
+      # tier could take the handoff landed on one surface only and were invisible to the
+      # other.
+      #
+      # capabilities.yaml declares what exists and which surfaces carry it. This step is
+      # what makes that declaration binding rather than decorative. It is NOT a parity
+      # check -- asymmetry is often correct, and hosted MCP servers are kept out of
+      # Hermes on purpose because every tool costs prompt space on every request. It
+      # requires that asymmetry be DECLARED, with a reason.
+      #
+      # It also validates skill frontmatter, which nothing did before. That is not
+      # theoretical: four skills shipped unreachable, three of them MAD Gambit ones,
+      # because a skill with a missing metadata block loads fine and simply never fires.
+      - name: Capabilities match capabilities.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check-capabilities.py
 
       # A doc reference that points at a file which does not exist is the same class
       # of silent failure as a hook pointing at a missing script: nothing errors, the

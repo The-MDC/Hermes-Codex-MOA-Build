@@ -1,0 +1,798 @@
+# capabilities.yaml — the single declaration of what this orchestration can do.
+#
+# WHY THIS FILE EXISTS
+#     Capabilities in this build are not shared, they are DUPLICATED, and the
+#     duplicates had already diverged before anything noticed: 78 skills under
+#     .claude/skills/, 31 under hermes-skills/, and nine names in common. Ten MCP
+#     servers in .mcp.json, seven in config.yaml, two in common.
+#
+#     Nothing declared any of it. A capability was "available" only because someone
+#     remembered to put a copy in the right folder, and CI checked none of it.
+#
+#     The cost was concrete. `local-desktop` and `hermes-orchestration` were written
+#     so the local tier could take the handoff, and they landed in hermes-skills/
+#     only -- invisible to the instructing model. Nothing reported that.
+#
+# WHAT THIS FILE IS NOT
+#     It is not a demand for parity. Hosted MCP servers are kept out of Hermes ON
+#     PURPOSE: every discovered tool is injected into the system prompt on EVERY
+#     request, which on a ~40 RPM tier is a permanent tax, and checks.yml enforces a
+#     deliberate two-name hosted allowlist. Forcing Claude Code's eight hosted
+#     servers into Hermes would undo a decision made for a good reason.
+#
+#     So the contract is narrower and more useful: EVERY capability is declared
+#     once, with the surfaces that carry it, and ANY asymmetry carries a reason.
+#     scripts/check-capabilities.js fails the build when the tree stops matching this
+#     file -- which is what makes the structure binding rather than aspirational.
+#
+# THE CONTRACT, for anything added later
+#     name              the lookup key. For hermes-skills/ that is the DIRECTORY
+#                       name; for .claude/skills/ it is the frontmatter `name`,
+#                       which is why the two are compared by name and not by path.
+#     surfaces          [claude], [hermes], or both. Must match what is on disk.
+#     source            ported | hand-written | claude-native
+#     category          the directory it lives under
+#     asymmetry_reason  REQUIRED whenever `surfaces` has one entry. An asymmetric
+#                       capability with no stated reason is a CI failure, because
+#                       that is how "we will fix it later" becomes permanent.
+#
+# datasets, plugins and artifacts are declared-but-empty rather than omitted, so the
+# first one added has an obvious home and inherits the same checks.
+#
+# Regenerate the skeleton from disk with:  node scripts/check-capabilities.js --emit
+# Then restore the reasons by hand -- the generator cannot know them.
+version: 1
+generated: '2026-09-22'
+skills:
+- name: account-research
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: agentic-gateway
+  surfaces:
+  - hermes
+  source: ported
+  category: blockchain
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: alchemy-api
+  surfaces:
+  - hermes
+  source: ported
+  category: blockchain
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: algorithmic-art
+  surfaces:
+  - hermes
+  source: ported
+  category: creative
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: analyze
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: api-design
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: software-development
+- name: architecture
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: article-writing
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: backend-patterns
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: software-development
+- name: brand-guidelines
+  surfaces:
+  - hermes
+  source: ported
+  category: creative
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: brand-review
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: build-dashboard
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: call-prep
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: call-summary
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: campaign-plan
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: canvas-design
+  surfaces:
+  - hermes
+  source: ported
+  category: creative
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: capacity-plan
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: change-request
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: code-review
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: coding-standards
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: competitive-brief
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: competitive-positioning-brief
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: competitive-intelligence
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: compliance-check
+  surfaces:
+  - claude
+  source: claude-native
+  category: legal
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: content-creation
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: content-engine
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: cowork-plugin-customizer
+  surfaces:
+  - claude
+  source: claude-native
+  category: cowork
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: create-an-asset
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: create-cowork-plugin
+  surfaces:
+  - claude
+  source: claude-native
+  category: cowork
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: data-visualization
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: debug
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: deep-research
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: research
+- name: deploy-checklist
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: doc-coauthoring
+  surfaces:
+  - hermes
+  source: ported
+  category: productivity
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: documentation
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: draft-outreach
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: email-sequence
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: eval-harness
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: explore-data
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: file-reading
+  surfaces:
+  - hermes
+  source: ported
+  category: media
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: financial-statements
+  surfaces:
+  - claude
+  source: claude-native
+  category: finance
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: forecast
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: frontend-design
+  surfaces:
+  - hermes
+  source: ported
+  category: software-development
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: frontend-patterns
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: frontend-slides
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: gh-aw-agentic-workflows
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: hermes-orchestration
+  surfaces:
+  - hermes
+  source: hand-written
+  category: operations
+  asymmetry_reason: hand-written for Hermes' own tools and this build; no upstream to port from, and nothing
+    equivalent exists on the Claude surface
+- name: incident-response
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: internal-comms
+  surfaces:
+  - hermes
+  source: ported
+  category: productivity
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: investor-materials
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: finance
+- name: investor-outreach
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: finance
+- name: investor-pitch
+  surfaces:
+  - claude
+  source: claude-native
+  category: madhats
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: learn
+  surfaces:
+  - hermes
+  source: ported
+  category: productivity
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: legal-risk-assessment
+  surfaces:
+  - claude
+  source: claude-native
+  category: legal
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: local-desktop
+  surfaces:
+  - hermes
+  source: hand-written
+  category: operations
+  asymmetry_reason: hand-written for Hermes' own tools and this build; no upstream to port from, and nothing
+    equivalent exists on the Claude surface
+- name: mad-gambit-ai-agents
+  surfaces:
+  - hermes
+  source: ported
+  category: madhats
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: mad-gambit-context
+  surfaces:
+  - hermes
+  source: ported
+  category: madhats
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: market-research
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: research
+- name: mcp-builder
+  surfaces:
+  - hermes
+  source: ported
+  category: software-development
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: mcp-server-patterns
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: software-development
+- name: memory-management
+  surfaces:
+  - claude
+  source: claude-native
+  category: productivity
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: metrics-review
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: mpp-platform
+  surfaces:
+  - claude
+  source: claude-native
+  category: madhats
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: pdf-reading
+  surfaces:
+  - hermes
+  source: ported
+  category: media
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: performance-report
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: pipeline-review
+  surfaces:
+  - claude
+  source: claude-native
+  category: sales
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: pptx
+  surfaces:
+  - hermes
+  source: ported
+  category: media
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: process-doc
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: product-brainstorming
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: review-contract
+  surfaces:
+  - claude
+  source: claude-native
+  category: legal
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: risk-assessment
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: roadmap-update
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: runbook
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: security-audit
+  surfaces:
+  - hermes
+  source: ported
+  category: security
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: security-review
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: security
+- name: seo-audit
+  surfaces:
+  - claude
+  source: claude-native
+  category: marketing
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: skill-creator
+  surfaces:
+  - hermes
+  source: ported
+  category: autonomous-ai-agents
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: smart-contracts
+  surfaces:
+  - claude
+  source: claude-native
+  category: madhats
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: solidity-foundry
+  surfaces:
+  - hermes
+  source: ported
+  category: blockchain
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: sprint-planning
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: stakeholder-update
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: start
+  surfaces:
+  - claude
+  source: claude-native
+  category: productivity
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: statistical-analysis
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: status-report
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: strategic-compact
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: synthesize-research
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: system-design
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: task-management
+  surfaces:
+  - claude
+  source: claude-native
+  category: productivity
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: tdd-workflow
+  surfaces:
+  - claude
+  source: claude-native
+  category: ecc
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: tech-debt
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: testing-strategy
+  surfaces:
+  - claude
+  source: claude-native
+  category: engineering
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: triage-nda
+  surfaces:
+  - claude
+  source: claude-native
+  category: legal
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: validate-data
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: variance-analysis
+  surfaces:
+  - claude
+  source: claude-native
+  category: finance
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: vendor-review
+  surfaces:
+  - claude
+  source: claude-native
+  category: operations
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: vercel-for-github
+  surfaces:
+  - hermes
+  source: ported
+  category: devops
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: vercel-git-deploys
+  surfaces:
+  - hermes
+  source: ported
+  category: devops
+  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
+- name: verification-loop
+  surfaces:
+  - claude
+  - hermes
+  source: ported
+  category: software-development
+- name: write-query
+  surfaces:
+  - claude
+  source: claude-native
+  category: data
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+- name: write-spec
+  surfaces:
+  - claude
+  source: claude-native
+  category: product
+  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
+    knowledge useful outside Claude''s own surface'
+mcp_servers:
+- name: alchemy
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: atomicmemory
+  surfaces:
+  - claude
+  - hermes
+- name: cloudflare
+  surfaces:
+  - hermes
+  asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+- name: crawl4ai
+  surfaces:
+  - claude
+  - hermes
+- name: figma
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: github
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: gmail
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: google-drive
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: hermes
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: hermes-council
+  surfaces:
+  - hermes
+  asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+- name: hermes-skills
+  surfaces:
+  - hermes
+  asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+- name: netlify
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: submcp
+  surfaces:
+  - hermes
+  asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+- name: supabase
+  surfaces:
+  - claude
+  asymmetry_reason: hosted, and every MCP tool is injected into Hermes' system prompt on every request
+    -- checks.yml enforces a deliberate two-name hosted allowlist, so adding this to Hermes is a reviewed
+    decision, not a default
+- name: voicebox
+  surfaces:
+  - hermes
+  asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+datasets: []
+plugins: []
+artifacts: []
+

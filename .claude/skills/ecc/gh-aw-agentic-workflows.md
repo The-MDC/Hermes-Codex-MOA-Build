@@ -1,4 +1,5 @@
 ---
+name: gh-aw-agentic-workflows
 description: How MADHATs uses GitHub Agentic Workflows (gh-aw) to run Claude Code as PR/issue automation instead of only interactively
 ---
 

@@ -1,3 +1,9 @@
+---
+name: mpp-platform
+description: Work on the MADHATs Platform Protocol — platform architecture, MPP spec work, API design, database schema, frontend components, prediction market mechanics and tokenomics implementation. Carries the stack decisions so they are not re-litigated per task.
+origin: MADHATs
+---
+
 # Skill: MPP (MADHATs Platform Protocol) Development
 
 ## When to Use This Skill
