@@ -187,7 +187,7 @@ if ($Deep) {
 
     Probe 'hf-router'   'https://router.huggingface.co/v1'     'HF_TOKEN'           'deepseek-ai/DeepSeek-V4-Pro'
     Probe 'nvidia-nim'  'https://integrate.api.nvidia.com/v1'  'NVIDIA_API_KEY'     'nvidia/nemotron-3-super-120b-a12b'
-    Probe 'or-fallback' 'https://openrouter.ai/api/v1'         'OPENROUTER_API_KEY' 'qwen/qwen3.5-122b-a10b'
+    Probe 'or-fallback' 'https://openrouter.ai/api/v1'         'OPENROUTER_API_KEY' 'deepseek-ai/DeepSeek-V4.1-Flash'
 }
 
 # ---------------------------------------------------------------- verdict

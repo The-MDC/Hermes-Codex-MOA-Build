@@ -21,7 +21,7 @@
 #
 #   parent      HF router      DeepSeek-V4-Pro           1.6T (49B active), 1M ctx
 #   subagents   NVIDIA NIM     Nemotron-3-Super-120B     high-compute delegation
-#   fallback    OpenRouter     Qwen3.5-122B-A10B         tool use + vision on 429
+#   fallback    OpenRouter     DeepSeek-V4.1-Flash       552B, 8B/16B active, 1M ctx
 #   floor       your laptop    hermes3:8b (Ollama)       support, routing, memory
 #               (same tier)    nemotron-nano:12b-v2      heavier local work
 #
@@ -91,8 +91,8 @@ providers:
       - nvidia/nemotron-3-super-120b-a12b
     discover_models: false
     # nim-preflight.sh reports what the endpoint advertises. Set this to the number
-    # it prints. Export NVIDIA_NIM_MODEL to point the preflight at the model above
-    # — its default is still the retired Kimi-K3 id.
+    # it prints. The preflight now defaults to the model above; NVIDIA_NIM_MODEL
+    # overrides it if you need to probe a different one.
     context_length: 131072
 
   or-fallback:
@@ -100,12 +100,38 @@ providers:
     api: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
     transport: chat_completions
-    # Third bucket, and the 429 escape hatch. BFCL-V4 72.2 on tool use, MMMU-Pro
-    # 76.9 on vision, 10B active. Apache-2.0.
-    default_model: qwen/qwen3.5-122b-a10b
+    # Third bucket: the 429 escape hatch, AND the workhorse for the two heavy
+    # auxiliary slots. Both jobs land on one model on purpose.
+    #
+    # This tier used to run Qwen3.5-122B-A10B. Replacing it with a DeepSeek keeps
+    # the whole cloud stack in ONE family -- one tokenizer, one chat template, one
+    # tool-call convention across parent, fallback and auxiliaries. It also makes
+    # failover stop being a trade: the old comment here had to explain what you
+    # gained and lost when the fallback fired. Now you lose nothing but latency.
+    #
+    # DeepSeek-V4.1-Flash, from its model card (Sep 2026, MIT):
+    #   552B backbone, MoE, multimodal -- takes images and text natively
+    #   1,000,000-token context
+    #   Causal Encoder-Decoder: 40 layers as a 20-layer causal encoder + 20-layer
+    #     decoder. The decoder's global KV is projected from the FINAL encoder
+    #     hidden states rather than per-decoder-layer, so it activates only
+    #     8B parameters per token on prefill and 16B on decode.
+    #   SWA Bounded Replay cuts persistent KV cache to ~1/8 of DeepSeek-V4-Flash.
+    #
+    # That prefill number is why this model suits this slot specifically. The card
+    # names "input-heavy agentic workloads" as the target, and compression and
+    # web_extract are exactly that shape: a large context in, a short summary out.
+    # Paying 8B-active on the input half is the whole cost of those slots.
+    #
+    # NO BENCHMARK FIGURES ARE QUOTED HERE. The previous entry carried measured
+    # numbers (BFCL-V4, MMMU-Pro) for a DIFFERENT model; they were deleted rather
+    # than carried across, because a benchmark belongs to the model it was run on.
+    default_model: deepseek-ai/DeepSeek-V4.1-Flash
     models:
-      - qwen/qwen3.5-122b-a10b
+      - deepseek-ai/DeepSeek-V4.1-Flash
     discover_models: false
+    # Held at the parent's window rather than the architectural million, for the
+    # same reason: raise it to what the endpoint advertises, not the model card.
     context_length: 262144
 
   local:
@@ -186,7 +212,7 @@ fallback_providers:
   # A 429 or an outage on the parent falls through to a different provider rather
   # than stopping.
   - provider: custom
-    model: qwen/qwen3.5-122b-a10b
+    model: deepseek-ai/DeepSeek-V4.1-Flash
     base_url: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
   # Last resort, and the only entry that survives losing the network. Much smaller
@@ -290,7 +316,7 @@ web:
 # Switching mid-session, with the names as they now stand:
 #   /model custom:hf-router:deepseek-ai/DeepSeek-V4-Pro
 #   /model custom:nvidia-nim:nvidia/nemotron-3-super-120b-a12b
-#   /model custom:or-fallback:qwen/qwen3.5-122b-a10b
+#   /model custom:or-fallback:deepseek-ai/DeepSeek-V4.1-Flash
 #   /model custom:local:hermes3:8b
 #   /model custom:local:nemotron-nano:12b-v2
 # ---------------------------------------------------------------------------
@@ -460,10 +486,21 @@ mcp_servers:
 auxiliary:
   compression:
     provider: "custom:or-fallback"
-    model: qwen/qwen3.5-122b-a10b
+    model: deepseek-ai/DeepSeek-V4.1-Flash
   web_extract:
     provider: "custom:or-fallback"
-    model: qwen/qwen3.5-122b-a10b
+    model: deepseek-ai/DeepSeek-V4.1-Flash
+  # VISION WAS BROKEN, and silently. This slot was left on `auto` back when the
+  # parent was Kimi-K3, which had vision. The parent is now DeepSeek-V4-Pro, whose
+  # pipeline tag is text-generation: text in, text out, no image path at all. So
+  # `auto` has been resolving image work to a model that cannot see, and Hermes
+  # reports that as a bad answer rather than as a missing capability.
+  #
+  # V4.1-Flash is multimodal natively, so naming it here is what gives the stack
+  # a vision backend for the first time since the parent changed.
+  vision:
+    provider: "custom:or-fallback"
+    model: deepseek-ai/DeepSeek-V4.1-Flash
   title_generation:
     provider: "custom:local"
     model: hermes3:8b
