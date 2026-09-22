@@ -5,6 +5,11 @@ What to install, in what order, and the two traps that cost a session each.
 Config: `configs/hermes/config.yaml` · Preflight: `scripts/nim-preflight.sh` ·
 Quant survey: `docs/models/kimi-k3-quants.md`
 
+> **This describes the committed design, not every live machine.** A Windows
+> deployment has diverged from it on five axes — different parent, different
+> delegation target, different local floor. Before debugging against this page,
+> read `docs/models/handoff-2026-09-22.md`.
+
 ## The shape of it
 
 ```

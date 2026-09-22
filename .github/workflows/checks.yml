@@ -82,6 +82,13 @@ jobs:
           d = yaml.safe_load(open("configs/hermes/config.yaml"))
 
           providers = d["providers"]
+          # Assert the key exists before indexing it. Renaming this provider is a
+          # real deployment shape (handoff-2026-09-22.md reports `nvidia`), and
+          # indexing a missing key raises a bare KeyError that names no cause —
+          # the one failure mode most likely to hit someone mid-reconciliation.
+          assert "nvidia-nim" in providers, \
+              "providers: must define 'nvidia-nim' — every custom:nvidia-nim reference " \
+              "in this file resolves through that exact key, so renaming it dangles them all"
           assert providers["nvidia-nim"]["api"] == "https://integrate.api.nvidia.com/v1", \
               "the NIM provider must point at NVIDIA's endpoint"
           assert providers["nvidia-nim"]["key_env"] == "NVIDIA_API_KEY", \
@@ -207,6 +214,45 @@ jobs:
               assert prov != parent_provider, \
                   f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
               assert cfg.get("model"), f"auxiliary.{task} names a provider but no model"
+
+          # Every provider REFERENCE must resolve to something that can actually
+          # serve. The exclusion check above compares excluded_providers against the
+          # `providers:` dict only — it never looks at what the REST of the file
+          # points at, and both ways a reference dies are silent: Hermes resolves a
+          # dead one by falling back to the main model, so the symptom is a bill and
+          # a latency change, not an error. Both were observed on a live deployment,
+          # recorded in docs/models/handoff-2026-09-22.md.
+          #
+          #   1. The reference names a provider that is also EXCLUDED. The exclusion
+          #      hides it, so the slot silently reverts to the parent. A config with
+          #      moa.aggregator on `anthropic` while `anthropic` sits in the
+          #      exclusion list is the case this catches.
+          #   2. `custom:X` names an X that is not in `providers:` at all, after a
+          #      rename (nvidia-nim -> nvidia) or a deletion. Every reference to the
+          #      old name dangles, and the slots quietly rejoin the parent bucket.
+          def provider_refs():
+              yield "model.provider", parent_provider
+              yield "delegation.provider", deleg["provider"]
+              for task_, cfg_ in aux.items():
+                  yield f"auxiliary.{task_}.provider", cfg_.get("provider")
+              moa = d.get("moa") or {}
+              for i, ref_ in enumerate(moa.get("reference_models") or []):
+                  yield f"moa.reference_models[{i}].provider", (ref_ or {}).get("provider")
+              if moa.get("aggregator"):
+                  yield "moa.aggregator.provider", moa["aggregator"].get("provider")
+
+          for where, ref in provider_refs():
+              if not ref or ref == "auto":
+                  continue
+              custom = ref.startswith("custom:")
+              bare = ref.split(":", 1)[1] if custom else ref
+              assert bare.lower() not in excluded, \
+                  f"{where} names '{bare}', which is in excluded_providers — the " \
+                  f"exclusion hides it and the slot falls back to the main model"
+              if custom:
+                  assert bare in providers, \
+                      f"{where} points at custom provider '{bare}', which is not " \
+                      f"defined in providers: — a rename or deletion left it dangling"
 
           # The throughput block. These are deliberate, counter-intuitive choices;
           # a well-meaning edit back to the defaults would quietly undo them.
