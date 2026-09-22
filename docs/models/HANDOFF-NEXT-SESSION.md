@@ -66,6 +66,7 @@ Three structural rules hold this together. Breaking any one fails **silently**:
 | No credential leakage | Ran with dummy keys in `.env`; zero occurrences in output |
 | `hermes-council` | **Fixed on the box.** Wrapper starts clean, no ModuleNotFoundError |
 | GitHub Actions | Green on all 7 commits, 6–12s each |
+| Cloudflare Workers disconnected | **Resolved 2026-09-22.** The integration was deleted by the repo owner. Verified rather than assumed: PR #13's head carried two check runs (`Workers Builds` failing in 0s, `harness checks`), PR #14's head carries **one** — `harness checks`, green, 12s. The `Workers Builds` run is absent, not merely passing. The red X frozen in #13's history does not clear: completed check runs are immutable |
 
 ## Assumed, NOT verified
 
@@ -111,38 +112,7 @@ variables. Rotation in the Render dashboard is the only thing that closes it.
 > Three files currently assert it needs rotating. If that stops being true, leaving
 > the assertion in place is exactly the staleness the 2026-09-22 audit cleaned up.
 
-### 2. Disconnect Cloudflare Workers from this repo
-
-Attached some time after 2026-09-19 (PRs #11 and #12 have no such check, #13 does).
-Fails in **0 seconds**, before reading the repo, on every commit including docs-only
-ones. By 11:30 on 2026-09-22 it was retry-looping several builds per minute on one
-unchanged commit. **No repo change can fix a build that dies before reading the
-repo** — do not attempt one, and do not add a `wrangler.toml` to make it pass.
-
-**Cloudflare side** (touches only this Worker — prefer this if other The-MDC repos
-deploy to Cloudflare):
-
-```
-https://dash.cloudflare.com/d266f6c59a542bce7394fb28b7580327/workers/services/view/madhats-claude-enhancement/production/settings
-```
-
-→ **Settings → Build → Git repository → Disconnect**
-
-That service URL is taken from the Cloudflare bot's own PR comments, so the account
-id and service name are verified. If the UI has moved `/settings`, drop the suffix
-and navigate from the service page.
-
-**GitHub side** (cleaner, but the App installation is org-wide):
-
-```
-https://github.com/organizations/The-MDC/settings/installations
-```
-
-→ **Cloudflare Workers and Pages → Configure** → remove `MADHATs-Claude-Enhancement`.
-
-The existing red X on PR #13 will **not** clear retroactively — completed check runs
-are immutable. Disconnecting stops it appearing on new commits.
-### 3. Run the quickstart on the Windows box
+### 2. Run the quickstart on the Windows box
 
 Everything in this repo is config and scripts; none of it is exercised until someone
 runs it. `docs/models/VSCODE-QUICKSTART.md`, then
@@ -202,7 +172,10 @@ in use — guarding nothing while looking green.
 - Develop on `claude/lucid-noether-0ui54b`. **PR #13 is merged**, so that branch was
   reset from `The-MDC` rather than continued — a merged PR cannot track new work, and
   stacking on merged commits re-proposes them. Follow-up work opens a NEW PR.
-- CI is `harness checks`. The Workers check is the known-bad one; ignore it.
+- CI is `harness checks`, and as of 2026-09-22 it is the **only** check. The
+  Cloudflare `Workers Builds` check that used to fail in 0s on every commit was
+  disconnected; if it ever reappears, the integration has been re-attached and the
+  fix is again on the Cloudflare or GitHub-App side, never in this repo.
 - Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) still
   need explicit approval to change, and `CLAUDE.md` is still their only declaration.
   **CI no longer enforces that.** The gate and `scripts/check-canonical-numbers.js`
