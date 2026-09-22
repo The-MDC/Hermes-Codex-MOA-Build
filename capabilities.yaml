@@ -11,7 +11,9 @@
 #
 #     The cost was concrete. `local-desktop` and `hermes-orchestration` were written
 #     so the local tier could take the handoff, and they landed in hermes-skills/
-#     only -- invisible to the instructing model. Nothing reported that.
+#     only -- invisible to the instructing model. Nothing reported that. Both now
+#     declare both surfaces, and scripts/port-skills-to-hermes.js projects the Claude
+#     copy from the canonical Hermes source rather than anyone maintaining two.
 #
 # WHAT THIS FILE IS NOT
 #     It is not a demand for parity. Hosted MCP servers are kept out of Hermes ON
@@ -22,7 +24,7 @@
 #
 #     So the contract is narrower and more useful: EVERY capability is declared
 #     once, with the surfaces that carry it, and ANY asymmetry carries a reason.
-#     scripts/check-capabilities.js fails the build when the tree stops matching this
+#     scripts/check-capabilities.py fails the build when the tree stops matching this
 #     file -- which is what makes the structure binding rather than aspirational.
 #
 # THE CONTRACT, for anything added later
@@ -39,7 +41,7 @@
 # datasets, plugins and artifacts are declared-but-empty rather than omitted, so the
 # first one added has an obvious home and inherits the same checks.
 #
-# Regenerate the skeleton from disk with:  node scripts/check-capabilities.js --emit
+# Regenerate the skeleton from disk with:  python3 scripts/check-capabilities.py --emit
 # Then restore the reasons by hand -- the generator cannot know them.
 version: 1
 generated: '2026-09-22'
@@ -357,11 +359,10 @@ skills:
     knowledge useful outside Claude''s own surface'
 - name: hermes-orchestration
   surfaces:
+  - claude
   - hermes
   source: hand-written
   category: operations
-  asymmetry_reason: hand-written for Hermes' own tools and this build; no upstream to port from, and nothing
-    equivalent exists on the Claude surface
 - name: incident-response
   surfaces:
   - claude
@@ -409,11 +410,10 @@ skills:
     knowledge useful outside Claude''s own surface'
 - name: local-desktop
   surfaces:
+  - claude
   - hermes
   source: hand-written
   category: operations
-  asymmetry_reason: hand-written for Hermes' own tools and this build; no upstream to port from, and nothing
-    equivalent exists on the Claude surface
 - name: mad-gambit-ai-agents
   surfaces:
   - hermes

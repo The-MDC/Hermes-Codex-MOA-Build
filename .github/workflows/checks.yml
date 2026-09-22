@@ -78,9 +78,11 @@ jobs:
             echo "node --check $f"; node --check "$f"; js_count=$((js_count+1))
           done < <(find scripts -name '*.js' | sort)
           [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
-          # Floor is 1, not 2: removing check-canonical-numbers.js left port-skills-to-hermes.js
-          # as the only *.js here. The guard still does its job — it fails a glob that matches
-          # nothing — but it has to track the real count, or the removal itself turns CI red.
+          # The floor tracks the real count, or a legitimate change turns CI red for the
+          # wrong reason. It went 2 -> 1 when check-canonical-numbers.js was removed and
+          # port-skills-to-hermes.js was briefly the only *.js here, then back to 2 when
+          # scripts/codex-mcp/server.js arrived. The guard's job is unchanged: fail a glob
+          # that matches nothing.
           [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
 
           # Python is checked too, because check-capabilities.py would otherwise be the only

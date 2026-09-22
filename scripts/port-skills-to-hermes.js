@@ -29,11 +29,40 @@
  *     Everything in INCLUDE below was judged to carry knowledge that is useful to an agent
  *     regardless of which harness it runs in.
  *
- * usage:
- *   node scripts/port-skills-to-hermes.js [--dry-run] [--out DIR]
+ * ONE SOURCE, TWO SURFACES, DRIVEN BY capabilities.yaml
+ *     The same knowledge has to reach two lookups. Hermes resolves a skill by its
+ *     DIRECTORY name under hermes-skills/<category>/<name>/SKILL.md; Claude Code resolves
+ *     it by the frontmatter `name` in a flat .claude/skills/<category>/<name>.md. Keeping
+ *     two hand-maintained copies is what let the trees diverge to 78 skills against 31
+ *     with nine names in common, and what left `local-desktop` and `hermes-orchestration`
+ *     -- the two skills written so the local tier could take the handoff -- visible to
+ *     Hermes and invisible to the model instructing it.
  *
- * Output defaults to hermes-skills/ in the repo root, laid out as Hermes expects:
+ *     So this script no longer decides where a skill goes. capabilities.yaml does, through
+ *     each entry's `surfaces`, and check-capabilities.py fails the build when disk stops
+ *     matching that declaration. Flipping a skill onto the Claude surface is a one-line
+ *     registry edit plus a re-run; no code change.
+ *
+ *     Hand-written skills under operations/ have no upstream, so their in-repo Hermes copy
+ *     IS the canonical source: it is read and projected onto the Claude surface, never
+ *     rewritten from itself.
+ *
+ * KEPT UP TO DATE
+ *     Every ported skill used to be stamped `version: 1.0.0` and nothing recorded which
+ *     upstream revision it came from, so "is this current?" had no answer. The port now
+ *     writes hermes-skills/.port-lock.json -- upstream path, SHA-256 of the upstream
+ *     SKILL.md, port date -- and `--check` re-hashes each source to name what has drifted.
+ *     Drift is reported, never failed on: the sources live outside this repo and are
+ *     absent on most machines, CI runners included.
+ *
+ * usage:
+ *   node scripts/port-skills-to-hermes.js [--dry-run] [--out DIR] [--claude-out DIR]
+ *   node scripts/port-skills-to-hermes.js --check     # drift report, writes nothing
+ *   node scripts/port-skills-to-hermes.js --registry FILE   # drive it from another registry
+ *
+ * Output defaults to hermes-skills/ and .claude/skills/ in the repo root:
  *   hermes-skills/<category>/<name>/SKILL.md  (+ any supporting files copied verbatim)
+ *   .claude/skills/<category>/<name>.md       (only where `surfaces` says claude)
  *
  * Install on a machine that has Hermes:
  *   cp -r hermes-skills/* ~/.hermes/skills/
@@ -41,15 +70,39 @@
 
 'use strict';
 
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 const REPO_ROOT = path.resolve(__dirname, '..');
 const DRY_RUN = process.argv.includes('--dry-run');
-const outFlag = process.argv.indexOf('--out');
-const OUT_DIR = outFlag !== -1 && process.argv[outFlag + 1]
-  ? path.resolve(process.argv[outFlag + 1])
-  : path.join(REPO_ROOT, 'hermes-skills');
+const CHECK = process.argv.includes('--check');
+
+function flagDir(flag, fallback) {
+  const i = process.argv.indexOf(flag);
+  return i !== -1 && process.argv[i + 1] ? path.resolve(process.argv[i + 1]) : fallback;
+}
+
+const OUT_DIR = flagDir('--out', path.join(REPO_ROOT, 'hermes-skills'));
+const CLAUDE_OUT_DIR = flagDir('--claude-out', path.join(REPO_ROOT, '.claude', 'skills'));
+
+// --registry exists so the assertions below can be driven against a deliberately broken
+// registry. A check that has never been seen to fail is not yet a check, and two have
+// shipped in this repo already.
+const REGISTRY_PATH = (() => {
+  const i = process.argv.indexOf('--registry');
+  return i !== -1 && process.argv[i + 1]
+    ? path.resolve(process.argv[i + 1])
+    : path.join(REPO_ROOT, 'capabilities.yaml');
+})();
+
+// The lock lives beside the Hermes output, so a scratch --out run locks to scratch and
+// cannot overwrite the real record while someone is testing.
+const LOCK_PATH = path.join(OUT_DIR, '.port-lock.json');
+
+// Stamped into every generated Claude-side file. Only a file carrying it is ever
+// overwritten; see claudeTargetIsOurs.
+const GENERATED_BY = 'scripts/port-skills-to-hermes.js';
 
 /**
  * Third-party skill repositories worth pulling in, with the clone that makes them
@@ -252,60 +305,485 @@ function copyDirExcept(src, dest, exceptFile) {
   }
 }
 
+// ---------------------------------------------------------------- the registry
+/**
+ * Read the `skills:` list out of capabilities.yaml.
+ *
+ * WHY A HAND-ROLLED READER
+ *     This repo has no package.json and no node_modules on purpose — the tree gets
+ *     copied onto a Windows box by a runbook, and taking a YAML dependency would add
+ *     an `npm install` to that bring-up. The registry is machine-emitted by
+ *     check-capabilities.py with a stable shape, so the subset that needs parsing is
+ *     small: a block sequence of mappings, scalars and one-level lists.
+ *
+ * STRICT ON PURPOSE
+ *     Every line inside the block must classify as one of five known shapes, and an
+ *     unclassifiable line THROWS rather than being skipped. A lenient parser that
+ *     silently drops an entry is the same failure this whole registry exists to
+ *     prevent — it would report a skill as Hermes-only because it never saw the
+ *     `claude` line. The entry count is cross-checked against a plain `- name:` grep
+ *     of the same file for the same reason.
+ */
+function readRegistrySkills() {
+  if (!fs.existsSync(REGISTRY_PATH)) {
+    throw new Error(`capabilities.yaml not found at ${REGISTRY_PATH} — it drives which surfaces get written`);
+  }
+  const text = fs.readFileSync(REGISTRY_PATH, 'utf8');
+  const lines = text.split('\n');
+  const out = new Map();
+
+  let inSkills = false;
+  let entry = null;
+  let listKey = null; // a block sequence is open under this key
+  let lastKey = null; // last scalar key, so a wrapped value can be recognised
+
+  const commit = () => {
+    if (!entry) return;
+    for (const required of ['name', 'surfaces', 'source', 'category']) {
+      if (entry[required] === undefined) {
+        throw new Error(`capabilities.yaml: skill entry ${entry.name || '(unnamed)'} has no ${required}`);
+      }
+    }
+    if (!Array.isArray(entry.surfaces) || entry.surfaces.length === 0) {
+      throw new Error(`capabilities.yaml: ${entry.name} declares no surfaces`);
+    }
+    out.set(entry.name, entry);
+    entry = null;
+  };
+
+  for (const line of lines) {
+    if (!inSkills) {
+      if (/^skills:\s*$/.test(line)) inSkills = true;
+      continue;
+    }
+    if (line.trim() === '' || /^\s*#/.test(line)) continue;
+
+    // A column-0 KEY ends the skills block (mcp_servers:, datasets:, ...). It must not
+    // match `- name:`, which is also at column 0 and starts every entry.
+    if (/^[A-Za-z_]/.test(line)) { commit(); break; }
+
+    let m;
+    if ((m = line.match(/^- ([A-Za-z_][\w-]*): (.*)$/))) {          // new entry
+      commit();
+      entry = {}; listKey = null; lastKey = m[1];
+      entry[m[1]] = unquoteScalar(m[2]);
+      continue;
+    }
+    if ((m = line.match(/^ {2}- (.*)$/))) {                          // list item
+      if (!entry || !listKey) {
+        throw new Error(`capabilities.yaml: list item with no open key: ${line}`);
+      }
+      entry[listKey].push(unquoteScalar(m[1]));
+      continue;
+    }
+    if ((m = line.match(/^ {2}([A-Za-z_][\w-]*):\s*$/))) {           // key opening a list
+      if (!entry) throw new Error(`capabilities.yaml: key outside an entry: ${line}`);
+      listKey = m[1]; lastKey = m[1];
+      entry[listKey] = [];
+      continue;
+    }
+    if ((m = line.match(/^ {2}([A-Za-z_][\w-]*): (.*)$/))) {         // scalar key
+      if (!entry) throw new Error(`capabilities.yaml: key outside an entry: ${line}`);
+      listKey = null; lastKey = m[1];
+      entry[m[1]] = unquoteScalar(m[2]);
+      continue;
+    }
+    if (/^ {4,}\S/.test(line) && lastKey) continue;                  // wrapped scalar
+
+    throw new Error(`capabilities.yaml: cannot parse line: ${line}`);
+  }
+  commit();
+
+  // Cross-check: a parser that silently lost entries is the failure mode that matters.
+  // Count `- name:` lines in the skills block ONLY -- mcp_servers entries share the shape.
+  let declaredCount = 0;
+  let counting = false;
+  for (const l of lines) {
+    if (/^skills:\s*$/.test(l)) { counting = true; continue; }
+    if (!counting) continue;
+    if (/^[A-Za-z_]/.test(l)) break;
+    if (/^- name: /.test(l)) declaredCount += 1;
+  }
+  if (out.size !== declaredCount) {
+    throw new Error(`capabilities.yaml: parsed ${out.size} skills but the file declares ${declaredCount}`);
+  }
+  return out;
+}
+
+function unquoteScalar(s) {
+  const t = String(s).trim();
+  if (/^'.*'$/.test(t)) return t.slice(1, -1).replace(/''/g, "'");
+  if (/^".*"$/.test(t)) return t.slice(1, -1).replace(/\\"/g, '"');
+  return t;
+}
+
+// --------------------------------------------------------------- surface emit
+function hermesSkillText(name, spec, description, author, license, body) {
+  const related = Object.entries(INCLUDE)
+    .filter(([n, s]) => n !== name && s.category === spec.category)
+    .map(([n]) => n);
+
+  return [
+    '---',
+    `name: ${name}`,
+    `description: ${yamlQuote(description)}`,
+    'version: 1.0.0',
+    `author: ${yamlQuote(author)}`,
+    `license: ${yamlQuote(license)}`,
+    'platforms: [linux, macos, windows]',
+    'metadata:',
+    '  hermes:',
+    `    tags: [${spec.tags.join(', ')}]`,
+    `    category: ${spec.category}`,
+    `    related_skills: [${related.join(', ')}]`,
+    '---',
+    '',
+    body.trimStart(),
+  ].join('\n');
+}
+
+/**
+ * The Claude surface is a FLAT file — .claude/skills/<category>/<name>.md — and Claude
+ * Code resolves a skill by its frontmatter `name`, not by its path. Hermes resolves by
+ * DIRECTORY name. Same knowledge, two lookups, so the projection keeps `name` identical
+ * and drops the Hermes-only keys rather than carrying a `metadata.hermes` block onto a
+ * surface that does not read it.
+ */
+function claudeSkillText(name, description, canonicalRel, body) {
+  return [
+    '---',
+    `name: ${name}`,
+    `description: ${yamlQuote(description)}`,
+    `generated_by: ${GENERATED_BY}`,
+    `canonical_source: ${canonicalRel}`,
+    '---',
+    '',
+    body.trimStart(),
+  ].join('\n');
+}
+
+/**
+ * Index the Claude surface by FRONTMATTER name, which is how Claude Code itself resolves
+ * a skill -- not by path.
+ *
+ * FOUND BY A DRY RUN, AND IT WOULD HAVE BEEN SILENT. The first version derived the Claude
+ * target from the skill's HERMES category, and the two trees do not agree: all nine
+ * dual-surface skills sit under .claude/skills/ecc/ while Hermes files them under
+ * software-development, research, finance and security. Writing to the Hermes category
+ * would have created a SECOND file with the same frontmatter `name` -- and because
+ * check-capabilities.py keys the Claude surface by name, one copy would simply have
+ * shadowed the other in the index with nothing reporting it.
+ *
+ * So an existing skill is written where it already lives. Only a genuinely new one falls
+ * back to <category>/<name>.md.
+ */
+function indexClaudeSurface() {
+  const index = new Map();
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(full); continue; }
+      if (!e.name.endsWith('.md')) continue;
+      const { front } = splitFrontmatter(fs.readFileSync(full, 'utf8'));
+      const name = unquote(front.name) || e.name.slice(0, -3);
+      if (!index.has(name)) index.set(name, full);
+    }
+  };
+  walk(CLAUDE_OUT_DIR);
+  return index;
+}
+
+/**
+ * Refuse to overwrite a Claude-side file this script did not write.
+ *
+ * 76 of the 78 files under .claude/skills/ are claude-native and have no upstream here.
+ * Writing one would destroy it with no copy anywhere, so a generated file is stamped
+ * and only a stamped file is ever replaced.
+ */
+function claudeTargetIsOurs(file) {
+  if (!fs.existsSync(file)) return true;
+  const { front } = splitFrontmatter(fs.readFileSync(file, 'utf8'));
+  return unquote(front.generated_by) === GENERATED_BY;
+}
+
+function sha256File(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+// ------------------------------------------------------------------- lockfile
+const LOCK_NOTE =
+  'Written by scripts/port-skills-to-hermes.js. `sha256` is of the UPSTREAM SKILL.md at ' +
+  'port time, which is what `--check` re-hashes to report drift. Entries are MERGED, not ' +
+  'replaced: source roots differ per machine, and a port run on a box that lacks one source ' +
+  'must not erase that skill\'s record. Only the source ROOT is recorded, not the resolved ' +
+  'path: under .claude/skills/synced the path carries an opaque per-install sync id, which ' +
+  'would churn this file on every machine and put an account identifier in version control. ' +
+  '--check re-resolves by name and prints the real path it found.';
+
+function readLock() {
+  if (!fs.existsSync(LOCK_PATH)) return null;
+  const raw = fs.readFileSync(LOCK_PATH, 'utf8');
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    throw new Error(`${path.relative(REPO_ROOT, LOCK_PATH)} is not valid JSON: ${err.message}`);
+  }
+  if (!parsed || typeof parsed !== 'object' || typeof parsed.skills !== 'object' || parsed.skills === null) {
+    throw new Error(`${path.relative(REPO_ROOT, LOCK_PATH)} has no skills object`);
+  }
+  return parsed;
+}
+
+function writeLock(fresh) {
+  const prev = readLock();
+  const merged = Object.assign({}, (prev && prev.skills) || {}, fresh);
+  const ordered = {};
+  for (const k of Object.keys(merged).sort()) ordered[k] = merged[k];
+  const doc = {
+    version: 1,
+    generated: today(),
+    note: LOCK_NOTE,
+    skills: ordered,
+  };
+  fs.mkdirSync(path.dirname(LOCK_PATH), { recursive: true });
+  fs.writeFileSync(LOCK_PATH, JSON.stringify(doc, null, 2) + '\n');
+  return { carried: Object.keys(merged).length - Object.keys(fresh).length, total: Object.keys(merged).length };
+}
+
+/**
+ * --check: report which ported skills have drifted from their upstream, and write nothing.
+ *
+ * Drift is a REPORT, not a gate. The sources live outside this repo and are absent on most
+ * machines — security-audit needs a Cloudflare clone that no CI runner has — so failing on
+ * drift would fail the build for a condition the build cannot see or fix.
+ */
+function runCheck() {
+  const lock = readLock();
+  if (!lock) {
+    console.log('port-skills-to-hermes --check');
+    console.log(`  no lockfile at ${path.relative(REPO_ROOT, LOCK_PATH)} — run the port once to create it`);
+    return 0;
+  }
+
+  const registry = readRegistrySkills();
+  const current = [];
+  const drifted = [];
+  const absent = [];
+  const handwritten = [];
+  const stale = [];
+  const unlocked = [];
+  const resurfaced = [];
+
+  for (const [name, rec] of Object.entries(lock.skills)) {
+    // The registry can be edited without re-running the port, which leaves a skill
+    // declared on a surface that was never written to. That is drift too, and unlike
+    // upstream drift this repo CAN see it.
+    const declared = registry.get(name);
+    if (declared && JSON.stringify((rec.surfaces || []).slice().sort()) !==
+                    JSON.stringify(declared.surfaces.slice().sort())) {
+      resurfaced.push({ name, locked: rec.surfaces || [], declared: declared.surfaces });
+    }
+
+    if (rec.source === 'hand-written') {
+      const canonical = path.join(REPO_ROOT, rec.upstream || '');
+      handwritten.push({ name, present: rec.upstream ? fs.existsSync(canonical) : false });
+      continue;
+    }
+    if (!INCLUDE[name]) { stale.push(name); continue; }
+    const src = findSource(name);
+    if (!src) { absent.push(name); continue; }
+    const now = sha256File(path.join(src, 'SKILL.md'));
+    if (now === rec.sha256) current.push(name);
+    else drifted.push({ name, was: rec.sha256, now, src });
+  }
+
+  for (const name of Object.keys(INCLUDE)) {
+    if (!lock.skills[name]) unlocked.push(name);
+  }
+
+  console.log('port-skills-to-hermes --check  (reports drift; writes nothing)');
+  console.log(`  lockfile: ${path.relative(REPO_ROOT, LOCK_PATH)} — ${Object.keys(lock.skills).length} entries, written ${lock.generated}`);
+  console.log('');
+  console.log(`  current       ${current.length}  upstream SKILL.md unchanged since it was ported`);
+  console.log(`  DRIFTED       ${drifted.length}  upstream changed — re-run the port to pick it up`);
+  console.log(`  absent        ${absent.length}  source root not on this machine, nothing to compare`);
+  console.log(`  hand-written  ${handwritten.length}  no upstream; drift does not apply`);
+  if (unlocked.length) console.log(`  unlocked      ${unlocked.length}  in the manifest but never ported here`);
+  if (stale.length) console.log(`  stale         ${stale.length}  locked but no longer in the manifest`);
+  if (resurfaced.length) console.log(`  RESURFACED    ${resurfaced.length}  capabilities.yaml changed surfaces since the port`);
+
+  if (drifted.length) {
+    console.log('');
+    console.log('  drifted:');
+    for (const d of drifted) {
+      console.log(`    ${d.name}`);
+      console.log(`      was ${d.was.slice(0, 16)}…  now ${d.now.slice(0, 16)}…`);
+      console.log(`      ${d.src}`);
+    }
+    console.log('');
+    console.log('  Re-port with: node scripts/port-skills-to-hermes.js');
+  }
+  if (resurfaced.length) {
+    console.log('');
+    console.log('  resurfaced — re-run the port so disk matches the declaration:');
+    for (const r of resurfaced) {
+      console.log(`    ${r.name}: locked [${r.locked.join(', ')}] -> declared [${r.declared.join(', ')}]`);
+    }
+  }
+  if (absent.length) {
+    console.log('');
+    console.log(`  absent: ${absent.join(', ')}`);
+  }
+  if (unlocked.length) {
+    console.log('');
+    console.log(`  unlocked: ${unlocked.join(', ')}`);
+  }
+  for (const h of handwritten) {
+    if (!h.present) console.log(`  WARN  hand-written ${h.name}: canonical file is gone from the repo`);
+  }
+
+  // Exit 0 even with drift, deliberately. See this function's header.
+  return 0;
+}
+
+// ----------------------------------------------------------------------- port
 function main() {
+  if (CHECK) {
+    // exitCode rather than exit(): process.exit() can truncate a piped stdout, and this
+    // report is the whole point of the mode.
+    process.exitCode = runCheck();
+    return;
+  }
+
+  // Read the lock FIRST. It throws on a corrupt file, and writeLock() runs last -- so
+  // validating it there would abort the run *after* every skill had been rewritten,
+  // leaving a half-done tree and an error that names the wrong step.
+  readLock();
+
+  const registry = readRegistrySkills();
+  const claudeIndex = indexClaudeSurface();
   const ported = [];
   const missing = [];
-  let supportFiles = 0;
+  const claudeWritten = [];
+  const refused = [];
+  const undeclared = [];
+  const lockEntries = {};
 
+  const surfacesFor = (name, fallback) => {
+    const entry = registry.get(name);
+    if (entry) return entry.surfaces;
+    undeclared.push(name);
+    return fallback;
+  };
+
+  // --- ported skills: upstream is canonical -------------------------------
   for (const [name, spec] of Object.entries(INCLUDE)) {
     const src = findSource(name);
     if (!src) { missing.push(name); continue; }
 
-    const text = fs.readFileSync(path.join(src, 'SKILL.md'), 'utf8');
+    const srcFile = path.join(src, 'SKILL.md');
+    const text = fs.readFileSync(srcFile, 'utf8');
     const { front, body } = splitFrontmatter(text);
     const description = unquote(front.description) || `${name} skill ported from Claude.`;
     const { author, license } = attributionFor(src, front);
+    const surfaces = surfacesFor(name, ['hermes']);
 
-    const related = Object.entries(INCLUDE)
-      .filter(([n, s]) => n !== name && s.category === spec.category)
-      .map(([n]) => n);
+    const hermesRel = path.join(path.relative(REPO_ROOT, OUT_DIR) || OUT_DIR, spec.category, name, 'SKILL.md');
 
-    const out = [
-      '---',
-      `name: ${name}`,
-      `description: ${yamlQuote(description)}`,
-      'version: 1.0.0',
-      `author: ${yamlQuote(author)}`,
-      `license: ${yamlQuote(license)}`,
-      'platforms: [linux, macos, windows]',
-      'metadata:',
-      '  hermes:',
-      `    tags: [${spec.tags.join(', ')}]`,
-      `    category: ${spec.category}`,
-      `    related_skills: [${related.join(', ')}]`,
-      '---',
-      '',
-      body.trimStart(),
-    ].join('\n');
-
-    const destDir = path.join(OUT_DIR, spec.category, name);
-    if (!DRY_RUN) {
-      fs.mkdirSync(destDir, { recursive: true });
-      fs.writeFileSync(path.join(destDir, 'SKILL.md'), out.endsWith('\n') ? out : out + '\n');
-      const before = supportFiles;
-      copyDirExcept(src, destDir, 'SKILL.md');
-      supportFiles = before; // counted below from disk instead
+    if (surfaces.includes('hermes')) {
+      const destDir = path.join(OUT_DIR, spec.category, name);
+      if (!DRY_RUN) {
+        const out = hermesSkillText(name, spec, description, author, license, body);
+        fs.mkdirSync(destDir, { recursive: true });
+        fs.writeFileSync(path.join(destDir, 'SKILL.md'), out.endsWith('\n') ? out : out + '\n');
+        copyDirExcept(src, destDir, 'SKILL.md');
+      }
     }
-    ported.push({ name, category: spec.category, src });
+
+    if (surfaces.includes('claude')) {
+      const file = claudeIndex.get(name) || path.join(CLAUDE_OUT_DIR, spec.category, `${name}.md`);
+      if (!claudeTargetIsOurs(file)) {
+        refused.push({ name, file: path.relative(REPO_ROOT, file) });
+      } else if (!DRY_RUN) {
+        const out = claudeSkillText(name, description, hermesRel, body);
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, out.endsWith('\n') ? out : out + '\n');
+        claudeWritten.push(name);
+      } else {
+        claudeWritten.push(name);
+      }
+    }
+
+    lockEntries[name] = {
+      source: 'ported',
+      upstream_root: SOURCE_ROOTS.find((r) => src.startsWith(r)) || path.dirname(src),
+      sha256: sha256File(srcFile),
+      ported: today(),
+      surfaces,
+    };
+    ported.push({ name, category: spec.category, src, surfaces });
   }
 
-  // Report
+  // --- hand-written skills: the in-repo Hermes copy is canonical -----------
+  //
+  // These have no upstream. The port must never rewrite them — that would replace the
+  // only copy with a regeneration of itself — so the Hermes side is read, not written,
+  // and only the Claude projection is generated.
+  for (const [name, entry] of registry) {
+    if (entry.source !== 'hand-written') continue;
+    const canonical = path.join(REPO_ROOT, 'hermes-skills', entry.category, name, 'SKILL.md');
+    if (!fs.existsSync(canonical)) continue;
+
+    const canonicalRel = path.relative(REPO_ROOT, canonical);
+    lockEntries[name] = {
+      source: 'hand-written',
+      upstream: canonicalRel,
+      sha256: sha256File(canonical),
+      ported: today(),
+      surfaces: entry.surfaces,
+    };
+
+    if (!entry.surfaces.includes('claude')) continue;
+
+    const { front, body } = splitFrontmatter(fs.readFileSync(canonical, 'utf8'));
+    const description = unquote(front.description) || `${name} — see ${canonicalRel}`;
+    const file = claudeIndex.get(name) || path.join(CLAUDE_OUT_DIR, entry.category, `${name}.md`);
+    if (!claudeTargetIsOurs(file)) {
+      refused.push({ name, file: path.relative(REPO_ROOT, file) });
+      continue;
+    }
+    if (!DRY_RUN) {
+      const out = claudeSkillText(name, description, canonicalRel, body);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, out.endsWith('\n') ? out : out + '\n');
+    }
+    claudeWritten.push(name);
+  }
+
+  let lockSummary = null;
+  if (!DRY_RUN) lockSummary = writeLock(lockEntries);
+
+  // ---------------------------------------------------------------- report
   const byCategory = {};
   for (const p of ported) (byCategory[p.category] ||= []).push(p.name);
 
   console.log(`port-skills-to-hermes${DRY_RUN ? ' (dry run)' : ''}`);
-  console.log(`  output: ${path.relative(REPO_ROOT, OUT_DIR) || OUT_DIR}`);
+  console.log(`  hermes out: ${path.relative(REPO_ROOT, OUT_DIR) || OUT_DIR}`);
+  console.log(`  claude out: ${path.relative(REPO_ROOT, CLAUDE_OUT_DIR) || CLAUDE_OUT_DIR}`);
+  console.log(`  surfaces driven by capabilities.yaml (${registry.size} declared)`);
   console.log(`  ported: ${ported.length} of ${Object.keys(INCLUDE).length} curated`);
+  console.log(`  claude copies written: ${claudeWritten.length}${claudeWritten.length ? ' — ' + claudeWritten.sort().join(', ') : ''}`);
+  if (lockSummary) {
+    console.log(`  lockfile: ${path.relative(REPO_ROOT, LOCK_PATH)} — ${lockSummary.total} entries` +
+                (lockSummary.carried ? ` (${lockSummary.carried} carried over from a previous machine)` : ''));
+  }
   console.log('');
   for (const [cat, names] of Object.entries(byCategory).sort()) {
     console.log(`  ${cat} (${names.length})`);
@@ -316,17 +794,45 @@ function main() {
     console.log(`  NOT FOUND on this machine (${missing.length}) — source roots differ per environment:`);
     for (const n of missing) console.log(`    ${n}`);
   }
+  if (undeclared.length) {
+    console.log('');
+    console.log(`  NOT IN capabilities.yaml (${undeclared.length}) — defaulted to [hermes]. Declare them,`);
+    console.log('  or check-capabilities.py will fail the build on the next push:');
+    for (const n of undeclared) {
+      console.log(`    - name: ${n}`);
+      console.log('      surfaces:');
+      console.log('      - hermes');
+      console.log('      source: ported');
+      console.log(`      category: ${INCLUDE[n] ? INCLUDE[n].category : '?'}`);
+      console.log('      asymmetry_reason: ');
+    }
+  }
+  if (refused.length) {
+    console.log('');
+    console.log(`  NOT OVERWRITTEN (${refused.length}) — these Claude-side files were hand-maintained,`);
+    console.log('  not generated here, and this script does not own them:');
+    for (const r of refused) console.log(`    ${r.name} -> ${r.file}`);
+    console.log('');
+    console.log('  This is the expected steady state, not an error. 76 of the 78 files under');
+    console.log('  .claude/skills/ are claude-native with no upstream in this repo, and replacing');
+    console.log('  one would destroy the only copy. To hand a skill over to generation, delete the');
+    console.log('  file; the next run writes it stamped with `generated_by:` and adopts it after.');
+  }
   console.log('');
   console.log(`  deliberately excluded: ${Object.keys(EXCLUDE).length} (see EXCLUDE in this file for each reason)`);
 
   // A port that silently produced nothing is worse than one that fails.
-  if (ported.length === 0) {
+  if (ported.length === 0 && claudeWritten.length === 0) {
     console.error('');
     console.error('port-skills-to-hermes: ported nothing. Source roots checked:');
     for (const r of SOURCE_ROOTS) console.error(`  ${r} ${fs.existsSync(r) ? '(exists)' : '(missing)'}`);
-    process.exit(1);
+    process.exitCode = 1;
   }
-  process.exit(0);
 }
 
-main();
+try {
+  main();
+} catch (err) {
+  console.error(`port-skills-to-hermes: ${err.message}`);
+  process.exit(1);
+}
