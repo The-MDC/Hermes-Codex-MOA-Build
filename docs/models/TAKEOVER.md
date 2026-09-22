@@ -416,6 +416,13 @@ portable between machines.
   "$PWD\scripts\hermes-council-launch.cmd", 'User')
 [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON',
   (Get-Command python).Source, 'User')
+
+# codex-mcp: same launcher pattern, one runtime over. The supervisor substitutes
+# its own Node for a bare `command:` entry exactly as it did its own Python.
+[Environment]::SetEnvironmentVariable('HERMES_CODEX_LAUNCHER',
+  "$PWD\scripts\codex-mcp-launch.cmd", 'User')
+[Environment]::SetEnvironmentVariable('HERMES_CODEX_NODE',
+  (Get-Command node).Source, 'User')
 ```
 
 Confirm the interpreter you just pinned is the one that actually has the package:

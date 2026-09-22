@@ -63,19 +63,25 @@ jobs:
           # Enumerated by glob rather than by name so a script added later is covered
           # without anyone remembering to edit this file. The counts are asserted
           # below: a glob that silently matches nothing is a check that cannot fail.
+          # RECURSIVE, not scripts/*.js — and that distinction already mattered once.
+          # scripts/codex-mcp/server.js lives in a subdirectory, and a top-level glob
+          # walks straight past it, so the MCP shim would have been the one script
+          # here that nothing parsed. find also degrades correctly when a pattern
+          # matches nothing, where an unmatched glob under `set -u` expands to itself
+          # and `node --check 'scripts/*.js'` fails for a confusing reason.
           sh_count=0
-          for f in scripts/*.sh; do
+          while IFS= read -r f; do
             echo "bash -n $f"; bash -n "$f"; sh_count=$((sh_count+1))
-          done
+          done < <(find scripts -name '*.sh' | sort)
           js_count=0
-          for f in scripts/*.js; do
+          while IFS= read -r f; do
             echo "node --check $f"; node --check "$f"; js_count=$((js_count+1))
-          done
+          done < <(find scripts -name '*.js' | sort)
           [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
           # Floor is 1, not 2: removing check-canonical-numbers.js left port-skills-to-hermes.js
           # as the only *.js here. The guard still does its job — it fails a glob that matches
           # nothing — but it has to track the real count, or the removal itself turns CI red.
-          [ "$js_count" -ge 1 ] || { echo "expected >=1 node script, found $js_count"; exit 1; }
+          [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
 
           # Python is checked too, because check-capabilities.py would otherwise be the only
           # script in scripts/ that nothing parses. It is Python rather than Node because the
@@ -83,9 +89,9 @@ jobs:
           # repo that deliberately has none -- while CI already runs python3 with PyYAML for
           # the Hermes config block below.
           py_count=0
-          for f in scripts/*.py; do
+          while IFS= read -r f; do
             echo "python3 -m py_compile $f"; python3 -m py_compile "$f"; py_count=$((py_count+1))
-          done
+          done < <(find scripts -name '*.py' | sort)
           [ "$py_count" -ge 1 ] || { echo "expected >=1 python script, found $py_count"; exit 1; }
 
       # The PowerShell scripts were unverified for three commits, because the

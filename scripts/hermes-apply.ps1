@@ -68,17 +68,21 @@ Install-One (Join-Path $repo 'configs\codex\config.toml')  (Join-Path $CodexHome
 
 Write-Host @"
 
-Three environment variables the config references by name, not value:
+Five environment variables the config references by name, not value:
 
   HERMES_SKILLS_SERVER     full path to skills-mcp-server\dist\index.js
   HERMES_COUNCIL_LAUNCHER  full path to scripts\hermes-council-launch.cmd
   HERMES_COUNCIL_PYTHON    the interpreter that HAS hermes_council installed
+  HERMES_CODEX_LAUNCHER    full path to scripts\codex-mcp-launch.cmd
+  HERMES_CODEX_NODE        the node.exe the Codex shim should pin
 
 Set them for your user so Hermes resolves the local MCP subprocesses:
 
   [Environment]::SetEnvironmentVariable('HERMES_SKILLS_SERVER','<path>','User')
   [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_LAUNCHER','<repo>\scripts\hermes-council-launch.cmd','User')
   [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON',(Get-Command python).Source,'User')
+  [Environment]::SetEnvironmentVariable('HERMES_CODEX_LAUNCHER','<repo>\scripts\codex-mcp-launch.cmd','User')
+  [Environment]::SetEnvironmentVariable('HERMES_CODEX_NODE',(Get-Command node).Source,'User')
 
 NOT HERMES_VENV_PYTHON. This block used to name it, and pointing at the venv was
 the bug: the supervisor substitutes its own Python for a bare `command`, so the

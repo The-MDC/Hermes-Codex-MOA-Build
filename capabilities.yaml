@@ -726,6 +726,11 @@ mcp_servers:
   surfaces:
   - claude
   - hermes
+- name: codex-mcp
+  surfaces:
+  - hermes
+  asymmetry_reason: a local shim rebuilding the Codex tool interface that upstream removed
+    in 0.154.0; Claude Code reaches Codex by other means and has no need for it
 - name: cloudflare
   surfaces:
   - hermes

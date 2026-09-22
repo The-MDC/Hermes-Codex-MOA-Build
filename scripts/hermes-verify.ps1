@@ -228,7 +228,7 @@ if ($hermes) {
         'a'  { @('crawl4ai', 'atomicmemory') }
         'b'  { @('crawl4ai', 'atomicmemory', 'hermes-skills') }
         default { @('voicebox', 'crawl4ai', 'atomicmemory', 'hermes-skills',
-                    'hermes-council', 'cloudflare', 'submcp') }
+                    'hermes-council', 'cloudflare', 'submcp', 'codex-mcp') }
     }
     foreach ($s in $expected) {
         if ($mcpOut -match [regex]::Escape($s)) { Ok "$s registered" }
@@ -242,6 +242,15 @@ if ($hermes) {
     if ($mcpOut -match 'hermes-council' -and $mcpOut -match '(?i)error|failed|unsupported') {
         Warn 'hermes-council is erroring - check WHICH interpreter it ran under (scripts/hermes-blockers.ps1) before suspecting packages'
     }
+    # Same check, one runtime over. config.yaml names this launcher as codex-mcp's
+    # command, and an unset variable means the server never starts -- which surfaces
+    # as the Codex tools simply being absent, not as an error.
+    if (-not $env:HERMES_CODEX_LAUNCHER) {
+        Warn 'HERMES_CODEX_LAUNCHER not set - config.yaml names it as codex-mcp''s command'
+    } elseif (-not (Test-Path $env:HERMES_CODEX_LAUNCHER)) {
+        Fail "HERMES_CODEX_LAUNCHER points at a missing file: $env:HERMES_CODEX_LAUNCHER"
+    } else { Ok 'codex-mcp launcher present' }
+
     if (-not $env:HERMES_COUNCIL_LAUNCHER) {
         Warn 'HERMES_COUNCIL_LAUNCHER not set - config.yaml names it as hermes-council''s command'
     } elseif (-not (Test-Path $env:HERMES_COUNCIL_LAUNCHER)) {

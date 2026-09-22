@@ -532,6 +532,31 @@ mcp_servers:
         - council_review
         - council_perspectives
 
+  # Codex, as TOOLS rather than as a shell string.
+  #
+  # `codex mcp list` reports Unsupported and always will: Codex 0.154.0 removed the
+  # mcp-server entry point on 2026-09-05 and Codex is an MCP CLIENT now. This is the
+  # interface rebuilt locally -- scripts/codex-mcp/server.js, dependency-free, talking
+  # newline-delimited JSON-RPC over stdio.
+  #
+  # It does NOT make Codex an inference provider. `openai-codex` stays excluded below,
+  # because that provider and the CLI draw on the same ChatGPT 5-hour window from two
+  # different token files. This wraps the subprocess the bundled skill already drives;
+  # it adds no second consumer of that quota.
+  #
+  # LAUNCHER, not a bare `node`, for the reason spelled out on hermes-council: the
+  # supervisor substitutes its own runtime for a `command:` entry, and a substituted
+  # Node fails exactly as misleadingly as the substituted Python did. Set
+  # HERMES_CODEX_LAUNCHER to scripts\codex-mcp-launch.cmd and HERMES_CODEX_NODE to the
+  # node.exe it should pin; the launcher refuses rather than guessing.
+  codex-mcp:
+    command: "${HERMES_CODEX_LAUNCHER}"
+    args: []
+    tools:
+      include:
+        - codex_exec
+        - codex_status
+
   # HOSTED — allowlisted. Every call is a round trip off-box.
   cloudflare:
     url: "https://mcp.cloudflare.com/mcp"
