@@ -9,7 +9,6 @@
 ## Verification
 
 - [ ] `scripts/madhats-doctor.sh` passes (no FAIL lines)
-- [ ] `node scripts/check-canonical-numbers.js` passes
 - [ ] If a hook or `hooks.json` changed: the referenced script exists and the hook fired in a real session
 - [ ] If a slash command changed: invoked it once end to end
 - [ ] If `.mcp.json` changed: every server still connects
@@ -18,7 +17,13 @@
 ## Canonical numbers
 
 <!-- Tick if untouched. If this PR CHANGES a canonical number, say who approved it —
-     CLAUDE.md requires explicit approval, and the number is restated in several files. -->
+     CLAUDE.md requires explicit approval, and the number is restated in several files.
+
+     READ THIS ONE PROPERLY. CI no longer checks it. The automated comparison against
+     every restatement in the repo was removed, so a drifted copy — "1.8%" where the
+     canonical figure is "1.88%" — will now reach main unless a human catches it here.
+     Both read as equally plausible. CLAUDE.md is the only source of truth; check the
+     restatement against it, not against memory. -->
 
 - [ ] No canonical number changed (fee 1.88%, community 28.8%, creator 40%, pre-money $12M)
 - [ ] A canonical number changed — approved by: ______ , and CLAUDE.md updated first

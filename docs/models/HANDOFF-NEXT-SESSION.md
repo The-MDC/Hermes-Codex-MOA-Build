@@ -7,7 +7,8 @@ authoritative version does not rot the same way. Dated records still have a plac
 `handoff-2026-09-22.md` is a record of *what was reported on a day* and is annotated
 rather than edited — but "what is true now" belongs here, and only here.
 
-Last updated: 2026-09-22 · Branch: `claude/lucid-noether-0ui54b` · PR #13 (draft)
+Last updated: 2026-09-22 · Branch: `claude/lucid-noether-0ui54b` (reset from `The-MDC`
+after PR #13 merged) · PR #13 **merged**
 
 ---
 
@@ -198,10 +199,17 @@ in use — guarding nothing while looking green.
 
 ## Repo conventions
 
-- Develop on `claude/lucid-noether-0ui54b`. PR #13 tracks it.
+- Develop on `claude/lucid-noether-0ui54b`. **PR #13 is merged**, so that branch was
+  reset from `The-MDC` rather than continued — a merged PR cannot track new work, and
+  stacking on merged commits re-proposes them. Follow-up work opens a NEW PR.
 - CI is `harness checks`. The Workers check is the known-bad one; ignore it.
-- Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) are
-  asserted by CI against `CLAUDE.md` and must not change without explicit approval.
+- Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) still
+  need explicit approval to change, and `CLAUDE.md` is still their only declaration.
+  **CI no longer enforces that.** The gate and `scripts/check-canonical-numbers.js`
+  were removed with the owner's explicit approval; agreement is now a reviewer's
+  checkbox in `.github/PULL_REQUEST_TEMPLATE.md`. Nothing automated will catch a
+  drifted restatement, and a drifted one reads exactly as plausibly as the correct
+  figure — so check a restatement against `CLAUDE.md`, never against memory.
 - No key-shaped string may enter `config.yaml`; CI and the preflight both reject it.
 - Verify before claiming. Several statements in this repo's history were plausible,
   confidently written, and wrong.

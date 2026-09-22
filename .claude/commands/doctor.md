@@ -18,7 +18,11 @@ Add `--quiet` to print only warnings and failures (useful in CI or a hook).
 | **claude harness** | `.claude/settings.json` parses; slash commands and rules counted; **every script referenced by `hooks.json` actually exists**; `.mcp.json` parses |
 | **hermes agent** | `hermes` on PATH; registered in `.mcp.json` |
 | **network egress** | github.com, npm registry, Anthropic API reachable — an egress allowlist is otherwise silent until a build fails deep inside |
-| **canonical numbers** | delegates to `scripts/check-canonical-numbers.js` |
+
+The doctor no longer checks canonical numbers. That group, its script and its two CI
+steps were removed with the owner's explicit approval. The numbers are still canonical
+and `CLAUDE.md` is still their declaration — agreement is now a reviewer's checkbox in
+`.github/PULL_REQUEST_TEMPLATE.md` rather than an automated comparison.
 
 ## Why it exists
 
