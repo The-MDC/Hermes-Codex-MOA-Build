@@ -114,6 +114,20 @@ variables. Rotation in the Render dashboard is the only thing that closes it.
 > Three files currently assert it needs rotating. If that stops being true, leaving
 > the assertion in place is exactly the staleness the 2026-09-22 audit cleaned up.
 
+**Answer it with `scripts/hermes-report.ps1`**, which exists because no session can
+see this machine:
+
+```powershell
+pwsh -File scripts/hermes-report.ps1
+```
+
+It inventories `$HERMES_HOME`, finds every `config.yaml.bak-*`, and reports **how
+many key-shaped strings each one contains and of what family** — never the value.
+That is the whole question: a backup with zero hits means nothing is exposed there,
+and one with a `rnd_` hit means rotate before deleting, because deleting a file does
+not un-expose what was in it. Its output is safe to paste back: values are never
+read into a variable, and every line is scrubbed of key shapes on the way out.
+
 ### 2. Run the quickstart on the Windows box
 
 Everything in this repo is config and scripts; none of it is exercised until someone
