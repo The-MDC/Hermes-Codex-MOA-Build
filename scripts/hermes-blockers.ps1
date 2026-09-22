@@ -40,83 +40,110 @@ $VenvPython = if ($env:HERMES_VENV_PYTHON) { $env:HERMES_VENV_PYTHON }
               else { Join-Path $HermesHome 'hermes-agent\venv\Scripts\python.exe' }
 
 # ============================================================ BLOCKER 1 =====
-Section 'blocker 1 - hermes-council / mcp.server.fastmcp'
+Section 'blocker 1 - hermes-council interpreter'
 
-if (-not (Test-Path $VenvPython)) {
-    Bad "no python at $VenvPython"
-    Act 'Set HERMES_VENV_PYTHON to the Hermes venv interpreter, then re-run.'
+# THIS SECTION USED TO TEST THE WRONG HYPOTHESIS, and the wrong one was very
+# convincing. The error was:
+#     ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+# An error naming a module invites the inference that the module is missing, so
+# this script previously compared `mcp` and `fastmcp` package versions inside the
+# Hermes venv and offered pins to reconcile them.
+#
+# That was wrong. The package imports FINE under the interpreter it was installed
+# into. The Hermes supervisor was substituting its own bundled Python, so the
+# import ran somewhere the packages had never been installed.
+#
+# So the question is not "which packages are present" -- it is "WHICH INTERPRETER
+# actually runs, and does THAT one have them". This section answers that by
+# testing every candidate interpreter independently and naming which ones work.
+
+$candidates = [ordered]@{}
+if ($env:HERMES_COUNCIL_PYTHON) { $candidates['HERMES_COUNCIL_PYTHON'] = $env:HERMES_COUNCIL_PYTHON }
+$globalPy = (Get-Command python -ErrorAction SilentlyContinue).Source
+if ($globalPy) { $candidates['global python'] = $globalPy }
+$venvPy = Join-Path $HermesHome 'hermes-agent\venv\Scripts\python.exe'
+if (Test-Path $venvPy) { $candidates['hermes venv'] = $venvPy }
+if ($env:HERMES_VENV_PYTHON) { $candidates['HERMES_VENV_PYTHON'] = $env:HERMES_VENV_PYTHON }
+
+if (-not $candidates.Count) {
+    Bad 'no candidate interpreter found at all'
+    Act 'Install Python, or set HERMES_COUNCIL_PYTHON to the one holding hermes_council.'
 } else {
-    Ok "venv python: $VenvPython"
-
-    # What is actually installed. `mcp` and `fastmcp` are DIFFERENT packages and
-    # the import path moved between them, which is the whole bug.
-    $pkgs = & $VenvPython -m pip list --format=json 2>$null | ConvertFrom-Json
-    $mcpPkg      = $pkgs | Where-Object { $_.name -eq 'mcp' }
-    $fastmcpPkg  = $pkgs | Where-Object { $_.name -eq 'fastmcp' }
-    $councilPkg  = $pkgs | Where-Object { $_.name -like '*hermes*council*' }
-
-    if ($mcpPkg)     { Ok "mcp==$($mcpPkg.version)" }     else { Bad 'mcp is NOT installed' }
-    if ($fastmcpPkg) { Ok "fastmcp==$($fastmcpPkg.version) (standalone)" }
-                     else { Info 'fastmcp (standalone) not installed' }
-    if ($councilPkg) { Ok "$($councilPkg.name)==$($councilPkg.version)" }
-                     else { Warn 'no hermes-council package found in this venv' }
-
-    # Probe the three import paths independently. Which ones resolve tells you
-    # which of the two packages the server should be importing from.
     $probe = @'
-import importlib, json
-out = {}
-for name in ("mcp", "mcp.server", "mcp.server.fastmcp", "fastmcp", "hermes_council"):
+import importlib, json, sys
+out = {"exe": sys.executable, "ver": "%d.%d.%d" % sys.version_info[:3]}
+for name in ("hermes_council", "mcp", "mcp.server.fastmcp", "fastmcp"):
     try:
         importlib.import_module(name); out[name] = "ok"
     except Exception as e:
-        out[name] = type(e).__name__ + ": " + str(e)[:80]
+        out[name] = type(e).__name__
 print(json.dumps(out))
 '@
-    $res = ($probe | & $VenvPython - 2>&1 | Out-String).Trim()
-    try { $imports = $res | ConvertFrom-Json } catch { $imports = $null }
 
-    if ($imports) {
-        foreach ($k in 'mcp','mcp.server','mcp.server.fastmcp','fastmcp','hermes_council') {
-            $v = $imports.$k
-            if ($v -eq 'ok') { Ok "import $k" } else { Bad "import $k -> $v" }
-        }
+    $working = @()
+    foreach ($label in $candidates.Keys) {
+        $exe = $candidates[$label]
+        if (-not (Test-Path $exe)) { Bad "$label -> $exe (does not exist)"; continue }
+        $raw = ($probe | & $exe - 2>&1 | Out-String).Trim()
+        try { $r = $raw | ConvertFrom-Json } catch { Bad "$label -> $exe (probe failed: $($raw -split "`n" | Select-Object -First 1))"; continue }
 
-        if ($imports.'mcp.server.fastmcp' -eq 'ok') {
-            Ok 'the reported blocker does NOT reproduce - the import path resolves'
-            Act 'Re-enable hermes-council in configs/hermes/config.yaml and restart the gateway.'
+        # hermes_council is the one that decides whether this interpreter can serve.
+        # The fastmcp line is reported for context only -- it is NOT the gate, and
+        # treating it as the gate is exactly the mistake this section corrects.
+        if ($r.hermes_council -eq 'ok') {
+            Ok "$label -> $exe  (py $($r.ver)) imports hermes_council"
+            $working += ,@($label, $exe)
+        } else {
+            Info "$label -> $exe  (py $($r.ver)) cannot import hermes_council: $($r.hermes_council)"
         }
-        elseif ($imports.'fastmcp' -eq 'ok') {
-            Warn 'fastmcp exists only as the STANDALONE package, not under mcp.server'
-            Info 'FastMCP was vendored into the mcp SDK as mcp.server.fastmcp, then split back'
-            Info 'out. hermes_council imports the vendored path; this venv has the split one.'
-            Act 'Two repairs, and they are not equivalent:'
-            Act '  (a) pin the SDK back:  pip install "mcp>=1.2,<2"   - keeps hermes_council unmodified'
-            Act '  (b) patch the import in hermes_council to use fastmcp - survives future SDK moves'
-            Act 'Prefer (a) unless you maintain hermes_council. -Fix applies (a).'
-            if ($Fix -and $PSCmdlet.ShouldProcess('hermes venv', 'pip install "mcp>=1.2,<2"')) {
-                & $VenvPython -m pip install "mcp>=1.2,<2"
-                $after = ('import importlib
-try:
-    importlib.import_module("mcp.server.fastmcp"); print("RESOLVED")
-except Exception as e:
-    print("STILL BROKEN:", e)' | & $VenvPython - 2>&1 | Out-String).Trim()
-                if ($after -match 'RESOLVED') { Ok 'mcp.server.fastmcp now imports' }
-                else { Bad $after; Act 'Escalate - repair (b) is the remaining path.' }
-            }
-        }
-        else {
-            Bad 'neither mcp.server.fastmcp nor fastmcp resolves'
-            Act 'pip install "mcp>=1.2,<2" in this venv, then re-run this script.'
-            if ($Fix -and $PSCmdlet.ShouldProcess('hermes venv', 'pip install "mcp>=1.2,<2"')) {
-                & $VenvPython -m pip install "mcp>=1.2,<2"
-            }
-        }
+        Info "     mcp=$($r.mcp)  mcp.server.fastmcp=$($r.'mcp.server.fastmcp')  fastmcp=$($r.fastmcp)"
+    }
+
+    Write-Host ''
+    if (-not $working.Count) {
+        Bad 'NO interpreter on this machine can import hermes_council'
+        Act 'That is a genuine install problem. pip install the package into ONE'
+        Act 'interpreter, then point HERMES_COUNCIL_PYTHON at exactly that one.'
     } else {
-        Bad 'import probe produced no parseable output'
-        Info $res
+        Ok "$($working.Count) interpreter(s) can serve hermes_council"
+
+        # The actual failure mode: a working interpreter exists, but the MCP entry
+        # does not pin it, so the supervisor is free to pick a different one.
+        $pinned = $env:HERMES_COUNCIL_PYTHON
+        if (-not $pinned) {
+            Bad 'HERMES_COUNCIL_PYTHON is NOT set - nothing pins the interpreter'
+            Act "Pin the one that works:"
+            Act "  [Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON','$($working[0][1])','User')"
+        } elseif ($working.Where({ $_[1] -eq $pinned }).Count) {
+            Ok "HERMES_COUNCIL_PYTHON pins a working interpreter"
+        } else {
+            Bad "HERMES_COUNCIL_PYTHON pins $pinned, which CANNOT import hermes_council"
+            Act "Repoint it at: $($working[0][1])"
+        }
+
+        $launcher = $env:HERMES_COUNCIL_LAUNCHER
+        if (-not $launcher) {
+            Bad 'HERMES_COUNCIL_LAUNCHER is NOT set - config.yaml names it as the command'
+            Act 'Point it at scripts\hermes-council-launch.cmd in this repo.'
+        } elseif (-not (Test-Path $launcher)) {
+            Bad "HERMES_COUNCIL_LAUNCHER points at a missing file: $launcher"
+        } else {
+            Ok "launcher present: $launcher"
+        }
     }
 }
+
+# The same exposure, one layer out. Any MCP entry whose `command` names a runtime
+# can have that runtime substituted; only `url:` entries are immune. A substituted
+# Node fails as misleadingly as a substituted Python did.
+Section 'blocker 1b - other command: MCP entries with the same exposure'
+foreach ($pair in @(@('atomicmemory','npx'), @('hermes-skills','node'))) {
+    $cmd = Get-Command $pair[1] -ErrorAction SilentlyContinue
+    if ($cmd) { Info "$($pair[0]) uses '$($pair[1])' -> $($cmd.Source)" }
+    else { Warn "$($pair[0]) uses '$($pair[1])', which is not on PATH" }
+}
+Info 'If either starts failing with a missing-module error, check which runtime'
+Info 'actually ran before touching any package. Same trap, different language.'
 
 # ============================================================ BLOCKER 2 =====
 Section 'blocker 2 - codex bridge reports Unsupported'

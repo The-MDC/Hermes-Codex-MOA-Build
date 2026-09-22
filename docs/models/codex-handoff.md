@@ -59,7 +59,7 @@ this same file already depends on its credentials meaning one thing." CI asserts
 the entry stays present, the same way it asserts `or-fallback` never collides with
 its own exclusion.
 
-The trade being made explicitly: Hermes' main reasoning stays on Kimi-K3, not GPT-5.x,
+The trade being made explicitly: Hermes' main reasoning stays on its own parent tier (DeepSeek-V4-Pro as of 2026-09-22; Kimi-K3 when this was written), not GPT-5.x,
 even though the ChatGPT plan's usage window is separately available and arguably
 "free" at the margin. Revisit only if the request-budget picture changes enough to
 justify a fifth entry in a picker this repo just fought to pin at four.

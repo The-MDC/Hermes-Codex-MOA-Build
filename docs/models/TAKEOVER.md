@@ -235,8 +235,19 @@ portable between machines.
 ```powershell
 [Environment]::SetEnvironmentVariable('HERMES_SKILLS_SERVER',
   "$env:LOCALAPPDATA\hermes\skills-mcp-server\dist\index.js", 'User')
-[Environment]::SetEnvironmentVariable('HERMES_VENV_PYTHON',
-  "$env:LOCALAPPDATA\hermes\hermes-agent\venv\Scripts\python.exe", 'User')
+
+# hermes-council: the LAUNCHER is the command, and it pins the interpreter.
+# HERMES_VENV_PYTHON is no longer used -- pointing at the venv was the bug.
+[Environment]::SetEnvironmentVariable('HERMES_COUNCIL_LAUNCHER',
+  "$PWD\scripts\hermes-council-launch.cmd", 'User')
+[Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON',
+  (Get-Command python).Source, 'User')
+```
+
+Confirm the interpreter you just pinned is the one that actually has the package:
+
+```powershell
+& (Get-Command python).Source -c "import hermes_council; print('ok')"
 ```
 
 **Success:** both paths exist.
@@ -271,13 +282,27 @@ Both were already failing before this runbook. Neither blocks the model tiers.
 ```
 
 **Success:** help text.
-**Known failure:** `ModuleNotFoundError: No module named 'mcp.server.fastmcp'` —
-the package imports but its MCP entrypoint does not, which is an SDK version
-mismatch inside the Hermes venv.
 
-**ESCALATE.** Until it is fixed, comment the `hermes-council` block out of
-`configs/hermes/config.yaml` and re-run step 3.2, rather than leaving it
-crash-looping on every Hermes start.
+**This was the blocker, and it is FIXED — the cause was not what it looked like.**
+The error was `ModuleNotFoundError: No module named 'mcp.server.fastmcp'`, which
+reads as a missing dependency. It was not. `hermes_council` imports cleanly under
+the interpreter it was installed into; the Hermes supervisor was substituting its
+own bundled Python when launching the MCP entry.
+
+The fix is `scripts/hermes-council-launch.cmd` — the supervisor launches the
+launcher, the launcher pins the interpreter, and there is no longer anything for
+the supervisor to substitute. Set `HERMES_COUNCIL_PYTHON` to the interpreter that
+can import `hermes_council`:
+
+```powershell
+(Get-Command python).Source        # find it
+[Environment]::SetEnvironmentVariable('HERMES_COUNCIL_PYTHON','<that path>','User')
+[Environment]::SetEnvironmentVariable('HERMES_COUNCIL_LAUNCHER',"$PWD\scripts\hermes-council-launch.cmd",'User')
+```
+
+**If it errors again, check WHICH interpreter ran before suspecting any package.**
+That inversion is the whole lesson: the error named a module, so a missing module
+was the obvious inference, and it was wrong.
 
 ### Step 4.2 — Codex bridge
 
@@ -373,7 +398,7 @@ divergence went unrecorded for three days and cost a session to rediscover.
 | Model answers but ignores tools | Sonnet | Wrong chat template — fix the Modelfile `TEMPLATE` |
 | Parent resolves to the wrong model | Sonnet | HF router likely does not serve V4-Pro; move parent to `or-fallback` |
 | `hermes mcp list` missing an entry | Nemotron | Re-run step 3.2, restart gateway, re-check once |
-| `ModuleNotFoundError: mcp.server.fastmcp` | Sonnet | MCP SDK version mismatch in the venv |
+| `ModuleNotFoundError: mcp.server.fastmcp` | Nemotron | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
 | `codex mcp list` says `Unsupported` | Sonnet | Protocol mismatch; `codex app-server` is the current interface |
 | Any key visible outside `.env` | **Human** | Rotate it first, then continue |
 | Ollama tag not found | Nemotron | Tag string must match `config.yaml` exactly; re-run step 1.4 |

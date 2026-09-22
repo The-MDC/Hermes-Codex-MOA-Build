@@ -423,16 +423,40 @@ mcp_servers:
         - get_skill
         - search_skills
 
-  # Multi-perspective review. Local subprocess in the Hermes venv.
+  # Multi-perspective review. Local subprocess.
   #
-  # KNOWN BROKEN as of 2026-09-22: `python -m hermes_council.server` raises
-  # ModuleNotFoundError: No module named 'mcp.server.fastmcp'. The package
-  # imports; the MCP entrypoint does not. Reconcile the MCP SDK version in the
-  # venv before enabling, and comment this entry out while debugging rather than
-  # leaving it crash-looping on every Hermes start.
+  # ROOT CAUSE CORRECTED 2026-09-22, AND THE CORRECTION IS THE POINT.
+  #
+  # This entry used to name a Python interpreter directly, and the Hermes
+  # supervisor SUBSTITUTED ITS OWN BUNDLED PYTHON when launching it. The symptom:
+  #     ModuleNotFoundError: No module named 'mcp.server.fastmcp'
+  # which reads as a dependency fault and is not one. hermes_council imports
+  # cleanly under the interpreter it was installed into -- verified on the box.
+  # The supervisor was simply running a different Python than the one holding
+  # the packages.
+  #
+  # An earlier revision of this file diagnosed it as an MCP SDK version mismatch
+  # and told the reader to reconcile package versions in the venv. That was
+  # WRONG, and it sent debugging one layer below where the fault lived. It is
+  # recorded here rather than quietly deleted because the wrong answer was
+  # entirely plausible: the error names a module, so a missing module is the
+  # obvious inference, and it is the wrong one.
+  #
+  # The fix is indirection the supervisor cannot reach through. `command` names a
+  # LAUNCHER; the launcher pins the absolute interpreter internally. Whatever the
+  # supervisor resolves for `command`, it cannot reach inside the launcher to
+  # swap what that launcher itself executes. scripts/hermes-council-launch.cmd
+  # refuses to run rather than guess an interpreter -- a silent fallback is the
+  # whole bug class.
+  #
+  # THE SAME EXPOSURE APPLIES TO EVERY `command:` ENTRY BELOW AND ABOVE.
+  # atomicmemory (npx) and hermes-skills (node) are the other two. A substituted
+  # Node fails the same way and just as misleadingly. The `url:` entries --
+  # voicebox, crawl4ai, and the two hosted servers -- are immune, because the
+  # supervisor connects to them rather than launching them.
   hermes-council:
-    command: "${HERMES_VENV_PYTHON}"
-    args: ["-m", "hermes_council.server"]
+    command: "${HERMES_COUNCIL_LAUNCHER}"
+    args: []
     tools:
       include:
         - council_review

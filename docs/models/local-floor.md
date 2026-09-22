@@ -1,5 +1,16 @@
 # The local floor: a model on your own machine
 
+> ## ⚠️ RETIRED — describes a topology no longer in use
+>
+> This page documents the **Kimi-K3 stack**, replaced on 2026-09-22. It is kept because
+> the *reasoning* is still sound — the request-economics, the route-vs-host arithmetic,
+> the rate-limit-bucket argument — but every model id, provider mapping and command on
+> this page is out of date. Do not follow its instructions.
+>
+> Current: `docs/models/VSCODE-QUICKSTART.md` · `docs/models/TAKEOVER.md`
+> What changed and why: `docs/models/handoff-2026-09-22.md`
+
+
 Added because the three cloud tiers share one failure mode — no network takes all of
 them at once. This tier is the only one nothing can rate-limit, meter, or disconnect.
 

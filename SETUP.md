@@ -89,8 +89,12 @@ Apply the relevant skill from .claude/skills/ before starting.
 
 ## Step 10: Local and NVIDIA inference (optional)
 
-Runs Hermes with Kimi-K3 on your NVIDIA NIM account, and keeps subagents off that
-metered endpoint by putting them on a different provider. Nothing runs on your laptop.
+Runs Hermes across four providers on four independent rate-limit buckets: DeepSeek-V4-Pro
+as the parent, Nemotron-3-Super-120B for subagents, DeepSeek-V4.1-Flash as the 429 escape,
+and Ollama on your own machine as the offline floor.
+
+**The Kimi-K3 topology this section used to describe is retired.** See
+`docs/models/VSCODE-QUICKSTART.md` (fast path) or `docs/models/TAKEOVER.md` (full bring-up).
 
 ```bash
 cp configs/hermes/config.yaml ~/.hermes/config.yaml   # back up yours first
@@ -106,10 +110,13 @@ scripts/nim-preflight.sh --list   # every model your NVIDIA key can reach
 Only the NVIDIA key is required. The other two each enable one tier, and the preflight
 warns rather than fails when they are absent — NIM-only is a legitimate choice.
 
-- `docs/models/running-the-stack.md` — install order, the two model choices, the two
-  traps, and the NVIDIA AI Workbench path
-- `docs/models/kimi-k3-quants.md` — why Kimi-K3 is an API model and not a local one
-- `docs/models/local-floor.md` — the offline tier (Hermes-4-14B) and the research browser
+- `docs/models/VSCODE-QUICKSTART.md` — **start here.** Local tier + DeepSeek, from VS Code
+- `docs/models/TAKEOVER.md` — the full six-phase bring-up, with a success line per step
+- `docs/models/handoff-2026-09-22.md` — what was deployed, how it had drifted, what is still open
+- `docs/models/codex-handoff.md` — why Codex is a delegate and never a model provider
+
+Retired, kept for their reasoning rather than their instructions:
+`running-the-stack.md`, `kimi-k3-quants.md`, `local-floor.md`
 
 The key is read from the environment. It never goes in `config.yaml`, and both the
 preflight and CI fail if anything key-shaped is committed.

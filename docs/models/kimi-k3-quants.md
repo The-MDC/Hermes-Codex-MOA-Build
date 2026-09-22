@@ -1,5 +1,16 @@
 # Kimi-K3 quantizations, and what to actually run
 
+> ## ⚠️ RETIRED — describes a topology no longer in use
+>
+> This page documents the **Kimi-K3 stack**, replaced on 2026-09-22. It is kept because
+> the *reasoning* is still sound — the request-economics, the route-vs-host arithmetic,
+> the rate-limit-bucket argument — but every model id, provider mapping and command on
+> this page is out of date. Do not follow its instructions.
+>
+> Current: `docs/models/VSCODE-QUICKSTART.md` · `docs/models/TAKEOVER.md`
+> What changed and why: `docs/models/handoff-2026-09-22.md`
+
+
 Surveyed 2026-09-17 against the live Hugging Face Hub and NVIDIA's NIM catalog.
 Every size below is a sum of the real LFS file sizes, not a repo-card claim.
 

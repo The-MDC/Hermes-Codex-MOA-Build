@@ -1,14 +1,19 @@
 # Running the stack: three providers, three rate-limit buckets
 
+> ## ⚠️ RETIRED — describes a topology no longer in use
+>
+> This page documents the **Kimi-K3 stack**, replaced on 2026-09-22. It is kept because
+> the *reasoning* is still sound — the request-economics, the route-vs-host arithmetic,
+> the rate-limit-bucket argument — but every model id, provider mapping and command on
+> this page is out of date. Do not follow its instructions.
+>
+> Current: `docs/models/VSCODE-QUICKSTART.md` · `docs/models/TAKEOVER.md`
+> What changed and why: `docs/models/handoff-2026-09-22.md`
+
+
 What to install, in what order, and the two traps that cost a session each.
 
-Config: `configs/hermes/config.yaml` · Preflight: `scripts/nim-preflight.sh` ·
-Quant survey: `docs/models/kimi-k3-quants.md`
-
-> **This describes the committed design, not every live machine.** A Windows
-> deployment has diverged from it on five axes — different parent, different
-> delegation target, different local floor. Before debugging against this page,
-> read `docs/models/handoff-2026-09-22.md`.
+Quant survey (also retired): `docs/models/kimi-k3-quants.md`
 
 ## The shape of it
 

@@ -149,10 +149,19 @@ if ($hermes) {
         if ($mcpOut -match [regex]::Escape($s)) { Ok "$s registered" }
         else { Warn "$s not listed by 'hermes mcp list'" }
     }
-    # Known broken as of 2026-09-22; surfaced rather than assumed fixed.
+    # hermes-council's failure was interpreter substitution by the supervisor,
+    # NOT a missing dependency -- see configs/hermes/config.yaml. Fixed by
+    # pointing `command` at a launcher that pins the interpreter. If it is
+    # erroring again, check which interpreter is actually being used before
+    # touching any package version.
     if ($mcpOut -match 'hermes-council' -and $mcpOut -match '(?i)error|failed|unsupported') {
-        Warn 'hermes-council may still be raising ModuleNotFoundError on mcp.server.fastmcp'
+        Warn 'hermes-council is erroring - check WHICH interpreter it ran under (scripts/hermes-blockers.ps1) before suspecting packages'
     }
+    if (-not $env:HERMES_COUNCIL_LAUNCHER) {
+        Warn 'HERMES_COUNCIL_LAUNCHER not set - config.yaml names it as hermes-council''s command'
+    } elseif (-not (Test-Path $env:HERMES_COUNCIL_LAUNCHER)) {
+        Fail "HERMES_COUNCIL_LAUNCHER points at a missing file: $env:HERMES_COUNCIL_LAUNCHER"
+    } else { Ok 'council launcher present' }
 }
 
 if ($codex) {
