@@ -459,12 +459,6 @@ skills:
   category: sales
   asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
     knowledge useful outside Claude''s own surface'
-- name: pptx
-  surfaces:
-  - hermes
-  source: ported
-  category: media
-  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
 - name: process-doc
   surfaces:
   - claude

@@ -201,15 +201,6 @@
         "hermes"
       ]
     },
-    "pptx": {
-      "source": "ported",
-      "upstream_root": "/root/.claude/skills/synced",
-      "sha256": "6c20f2928ca83f21bfed741aa2bbaf2069818f924199e9f7cd600ee2ed943ed3",
-      "ported": "2026-09-23",
-      "surfaces": [
-        "hermes"
-      ]
-    },
     "security-review": {
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",

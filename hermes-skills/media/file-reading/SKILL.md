@@ -9,7 +9,7 @@ metadata:
   hermes:
     tags: [Files, Parsing, Extraction]
     category: media
-    related_skills: [pptx, pdf-reading]
+    related_skills: [pdf-reading]
 ---
 
 # Reading Uploaded Files

@@ -175,8 +175,18 @@ const INCLUDE = {
   'internal-comms':       { category: 'productivity', tags: ['Comms', 'Status-Report', 'Update', 'Incident'] },
   'learn':                { category: 'productivity', tags: ['Learning', 'Explanation', 'Teaching'] },
 
-  // --- media: Hermes has docx / pdf / xlsx but not pptx ---------------------
-  'pptx':                 { category: 'media', tags: ['PowerPoint', 'Slides', 'Deck', 'Presentation'] },
+  // --- media ----------------------------------------------------------------
+  // `pptx` USED TO BE HERE, on the stated grounds that "Hermes has docx / pdf / xlsx
+  // but not pptx". That was checked once and then trusted. It is no longer true:
+  // upstream ships skills/productivity/powerpoint v1.1.0, "Create, read, edit .pptx
+  // decks with python-pptx" -- verified against the hermes-agent tree 2026-09-23.
+  //
+  // So the port was carrying a duplicate, and an expensive one: 1.3 MB of OOXML .xsd
+  // schemas, the second-heaviest thing in hermes-skills/. Dropped.
+  //
+  // The general lesson is worth more than the megabyte. Every "Hermes does not have
+  // X" in this file is a claim about a MOVING upstream, and nothing re-checks them.
+  // Re-read the bundled skills/ tree before trusting one.
   'file-reading':         { category: 'media', tags: ['Files', 'Parsing', 'Extraction'] },
   'pdf-reading':          { category: 'media', tags: ['PDF', 'OCR', 'Extraction'] },
 

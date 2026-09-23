@@ -9,7 +9,7 @@ metadata:
   hermes:
     tags: [PDF, OCR, Extraction]
     category: media
-    related_skills: [pptx, file-reading]
+    related_skills: [file-reading]
 ---
 
 # PDF Processing Guide

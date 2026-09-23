@@ -369,12 +369,34 @@ web:
 #   /model custom:local-vl:nemotron-nano-12b-v2-vl      (needs llama-server on :8080)
 # ---------------------------------------------------------------------------
 excluded_providers:
+  # EXACT LOWERCASE SET MATCH, NOT SUBSTRING. Verified in the hermes-agent source
+  # 2026-09-23: hermes_cli/model_switch_providers.py builds
+  # `excluded={str(p).strip().lower() for p in excluded_providers}`. So `google` does
+  # NOT cover `gemini`, and `openai-codex` does NOT cover `codex`. Every alias has to
+  # be listed by name.
+  #
+  # THIS LIST WAS SHORT BY SEVEN NAMES until that check was run. The source defines
+  # _GEMINI_NATIVE_PROVIDER_NAMES = {"gemini", "google", "google-gemini",
+  # "google-ai-studio"} and _GOOGLE_PROVIDER_NAMES adds {"vertex", "google-vertex",
+  # "vertex-ai"} -- only one of those seven was excluded. Separately,
+  # _VISION_AUTO_PROVIDER_ORDER = ("openrouter", "nous", "deepinfra") names deepinfra
+  # as a provider auxiliary VISION can auto-select, and it was not excluded either.
+  #
+  # Listing a name that is already covered costs nothing. Missing one puts a model in
+  # the picker that no tier owns, on a bucket nothing here accounts for.
   - openrouter
   - anthropic
   - openai
   - openai-codex
+  - codex
   - copilot
   - google
+  - gemini
+  - google-gemini
+  - google-ai-studio
+  - vertex
+  - google-vertex
+  - vertex-ai
   - mistral
   - deepseek
   - groq
@@ -384,6 +406,17 @@ excluded_providers:
   - ollama
   - lmstudio
   - nous
+  - deepinfra
+  - bedrock
+  - together
+  - fireworks
+  - perplexity
+  - moonshot
+  - qwen
+  - cohere
+  - novita
+  - nebius
+  - azure
 
 # ---------------------------------------------------------------------------
 # VOICE — jamiepine/hermes-voicebox
@@ -722,3 +755,72 @@ provider_routing:
   sort: "throughput"
   require_parameters: true
   data_collection: "deny"
+
+# ---------------------------------------------------------------------------
+# PROMPT CACHING
+#
+# Added 2026-09-23 after diffing this file against upstream's 2267-line
+# cli-config.yaml.example. This build was using 16 of the 25 top-level keys the
+# reference documents; the nine it was not using were not decisions, they were
+# things nobody had read. Every key below was verified present in the hermes-agent
+# source before being written here -- `prompt_caching` and `cache_ttl` resolve in 14
+# and 11 source files respectively -- because a config key that nothing reads is the
+# exact silent failure this build keeps paying for.
+#
+# WHY "1h" AND NOT THE "5m" DEFAULT. The upstream comment says to use 1h "for long
+# sessions with pauses between turns", which is precisely the shape of this build:
+# a takeover runbook run step by step, with a human reading output between steps.
+# At 5m the cache expires during the reading, and the parent re-sends a 1M-context
+# prompt it had already paid to cache.
+# ---------------------------------------------------------------------------
+prompt_caching:
+  cache_ttl: "1h"
+
+# ---------------------------------------------------------------------------
+# TOOL LOOP GUARDRAILS
+#
+# A model that cannot make a tool call work will try again, and the default posture
+# is to warn rather than stop. That is right at a terminal, where a human sees the
+# warning. It is wrong for anything this build delegates -- subagents on NIM, Codex
+# runs through the MCP shim -- because nobody is watching and a loop burns the
+# children's rate-limit bucket until the task times out.
+#
+# `non_interactive_hard_stop_enabled` is the key that matters here and it is ALREADY
+# true upstream; it is written out explicitly rather than inherited so that a future
+# upstream default change cannot quietly turn it off.
+# ---------------------------------------------------------------------------
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: false            # interactive: warn, let the human judge
+  non_interactive_hard_stop_enabled: true   # delegated: stop, nobody is watching
+  warn_after:
+    exact_failure: 2
+    same_tool_failure: 3
+    idempotent_no_progress: 2
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 5
+
+# ---------------------------------------------------------------------------
+# SKILLS
+#
+# `external_dirs` is the most useful thing found in the upstream reference and it is
+# LEFT COMMENTED ON PURPOSE, because turning it on changes how this repo is
+# installed and that is the owner's call, not a default.
+#
+# Today TAKEOVER step 3.4 copies hermes-skills/* into ~/.hermes/skills/. That copy is
+# a fork the moment it lands: a `git pull` in the repo does not reach it, and nothing
+# reports the drift. external_dirs points Hermes at the checkout instead -- read-only,
+# so skill creation still writes to ~/.hermes/skills/ -- and the skills a `git pull`
+# brings in are live with no second step.
+#
+# The trade is that the checkout must exist wherever Hermes runs, and a deleted or
+# moved repo silently removes 29 skills. Decide deliberately; do not just uncomment it.
+# ---------------------------------------------------------------------------
+skills:
+  # Every N tool-calling iterations, nudge the model to consider saving a skill.
+  # 0 disables. Left at the upstream default rather than tuned blind.
+  creation_nudge_interval: 15
+  # external_dirs:
+  #   - ${HERMES_BUILD_REPO}/hermes-skills

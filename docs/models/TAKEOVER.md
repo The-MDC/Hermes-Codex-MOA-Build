@@ -13,7 +13,7 @@ the local runner, and every earlier version of this table left that unsaid.
 
 | Actor | Available | Does | Does not |
 |---|---|---|---|
-| **A human, or Claude** | from the start | Phases 0 through step 1.3, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
+| **A human, or Claude** | from the start | Phases 0 through step 1.3, before any local model exists. Installs Ollama, pulls `hermes3:8b`, installs llama.cpp, stands up `llama-server`. | Skip step 1.4 because "the model is there". |
 | **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.3 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
 | **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
 
@@ -34,8 +34,8 @@ looks perfect. Commands stay in the shell a human or the harness drives.
 the model genuinely sees an image, one that it emits real `tool_calls` — and its
 outcome table says which of the three roles this runner may actually hold. Do not
 promote it to driving execution on the strength of ordinary chat looking fine; that
-is exactly what a wrong template hides. (`VSCODE-QUICKSTART.md` §2.6 is the equivalent
-probe for the two **Ollama** models on :11434; it does not cover this one.)
+is exactly what a wrong template hides. (The quickstart covers Ollama's `hermes3:8b` on :11434 only; it does
+not probe this model at all.)
 
 **The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
 `llama-server` on `127.0.0.1:8080`, and step 1.3 is what starts it. Before that it
@@ -83,8 +83,9 @@ Save the output. You will compare against it at step 6.1.
 
 ## Phase 1 — local models
 
-The local tier backs the floor plus five auxiliary slots. Nothing else works
-predictably until Ollama holds both models.
+The local tier backs the floor plus five auxiliary slots, and the VL runner backs
+vision plus all heavy local text. Nothing else works predictably until Ollama holds
+`hermes3:8b` and `llama-server` is answering on :8080.
 
 ### Step 1.1 — Confirm Ollama is serving
 
