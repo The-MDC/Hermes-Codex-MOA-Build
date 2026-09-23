@@ -26,11 +26,22 @@
 #   vision +    your laptop    nemotron-nano-12b-v2-vl   llama.cpp :8080, NOT Ollama
 #   heavy local                                          images AND heavy local text
 #
-# THE VISION TIER IS A SEPARATE SERVER ON PURPOSE. Ollama cannot attach the mmproj
-# projector a VL GGUF needs, and it fails by silently dropping vision rather than
-# refusing, so the model would load and simply not see. llama.cpp's llama-server
-# takes --mmproj and speaks the same OpenAI-compatible /v1. See the `local-vl`
-# entry for the full reasoning and the one-line revert to cloud vision.
+# THE VISION TIER IS A SEPARATE SERVER ON PURPOSE. Importing a VL GGUF plus its
+# separate mmproj projector through an Ollama Modelfile has a documented history of
+# failing SILENTLY: in ollama#9967 the projector shows up in `ollama show` and image
+# input still errors "this model is missing data required for image input". That is
+# the failure mode that matters -- create succeeds, vision is gone.
+#
+# Stated carefully, because the citation is narrower than a blanket claim: #9967 is
+# Gemma3 (Mar 2025, closed) and ollama#14730 is qwen35moe (closed as a duplicate,
+# root-caused to that architecture's clip runner). Neither establishes that Ollama
+# can NEVER do it, and neither says anything about nemotron_v2_vl. What they
+# establish is a real risk of silent capability loss on this exact path.
+#
+# llama.cpp is chosen because it is POSITIVELY verified rather than merely
+# not-disproven: llama-server takes --mmproj, and nemotron_v2_vl support is in
+# ggml-org/llama.cpp PR #19547 by name. See the `local-vl` entry for the build floor
+# and the one-line revert to cloud vision.
 #
 # THE INVARIANT IS "a different rate-limit bucket from the parent." It is NOT
 # "subagents must avoid NIM" — that was the old rule, and it encoded the old
@@ -238,12 +249,31 @@ providers:
     # 8.77 GB for Q5_K_M plus 1.69 GB for the BF16 projector -- the projector is not
     # quantized, and there is only one. Budget ~10.5 GB before KV.
     #
-    # Requires llama.cpp b6315 or later: that is where `nemotron_h`, the hybrid
-    # Mamba-Transformer architecture this model uses, became supported. An older
-    # build refuses to load it rather than degrading, which is the good failure.
+    # BUILD FLOOR -- CORRECTED 2026-09-23 AGAINST llama.cpp's OWN PR HISTORY.
     #
-    # Held well below the model's native window: images consume context fast, and
-    # KV is what runs a laptop out of memory, not the weights.
+    # This used to read "requires b6315 or later, that is where `nemotron_h` became
+    # supported". That was right about a DIFFERENT MODEL. `nemotronh` is the hybrid
+    # mamba2/attention arch for the TEXT Nemotron Nano v2, added in ggml-org/llama.cpp
+    # PR #15507, merged 2025-08-29 -- which is what b6315 dates to. It was researched
+    # when the text model held this slot, and carried over unchanged when the slot
+    # became the VL model. A build at b6315 loads the text model and does NOT load this
+    # one, after a 10.5 GB download.
+    #
+    # THE VL MODEL IS `nemotron_v2_vl`, AND IT NEEDS TWO PRs:
+    #   #19547  "Add Nemotron Nano 12B v2 VL support"            merged 2026-02-12
+    #   #23638  "mtmd: enable dynamic hi-res tiling for
+    #            nemotron_v2_vl"                                 merged ~2026-05-25
+    #
+    # #23638 IS NOT OPTIONAL FOR THIS BUILD. Without tiling the projector encodes every
+    # image at a fixed 256 tokens regardless of resolution, and `--image-min-tokens` /
+    # `--image-max-tokens` are silently ignored (issue #25317). This tier exists to read
+    # Windows installer dialogs and terminal output from screenshots; at 256 tokens that
+    # is, in the issue's own words, "effectively unusable" for document images.
+    #
+    # So: use a build from mid-2026 or later. Current nightlies (~b11118, 2026-09-22)
+    # carry both. An older build refuses to load rather than degrading, which is the
+    # good failure -- but only for #19547. Missing #23638 fails the WORSE way: it loads,
+    # it sees, and it reads screenshots badly.
     context_length: 16384
 
 model:

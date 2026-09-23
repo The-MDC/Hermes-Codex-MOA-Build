@@ -95,7 +95,16 @@ the projector, leaving a model with `-VL` in its name that cannot see.
 ### B3. llama.cpp, and serve it · **YOU**
 
 From <https://github.com/ggml-org/llama.cpp/releases>, take a **`b#####`** tag — not
-`v0.4.x`, those carry no Windows binaries. Need ≥ b6315; current nightly is ~b11118.
+`v0.4.x`, those carry no Windows binaries. **Take a recent one — mid-2026 or later.**
+Current nightly is ~b11118 (2026-09-22) and carries everything needed.
+
+The old instruction here said "≥ b6315" and was wrong by about nine months. b6315 is
+where `nemotronh` landed — the **text** Nemotron Nano v2 (llama.cpp PR #15507, merged
+2025-08-29), which used to hold this slot. This model is `nemotron_v2_vl` and needs
+PR **#19547** (merged 2026-02-12) plus PR **#23638** (dynamic hi-res tiling, ~2026-05-25).
+Without #23638 every image encodes at a fixed 256 tokens whatever its resolution, which
+makes reading a screenshot of a dialog or a terminal — this tier's whole job —
+effectively useless (issue #25317).
 
 - NVIDIA → `llama-b#####-bin-win-cuda-12.4-x64.zip` **plus**
   `cudart-llama-bin-win-cuda-12.4-x64.zip`, unzipped into the **same folder**.
@@ -223,9 +232,11 @@ that admits the gap:
 
 - **No script here has executed against a real Hermes install on Windows.** CI proves
   the files parse and agree with each other. It cannot prove behaviour.
-- **Whether llama.cpp b6315+ loads this VL model with its projector** — the GGUF and
-  the mmproj both exist and `nemotron_h` is supported; the two together on a real
-  build is what B3 settles, loudly.
+- **Whether a current llama.cpp build loads this VL model with its projector** — both
+  files exist (verified on the Hub: 8.77 GB + 1.69 GB) and `nemotron_v2_vl` support is
+  in PR #19547 by name. The two together on a real build is what B3 settles. A build
+  missing #19547 refuses loudly; one missing #23638 fails quietly, by reading
+  screenshots badly.
 - **The Codex shim has never run against a real `codex` binary.** Its error paths were
   exercised against a stub; the happy path is simulated.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** came from a prior handoff and

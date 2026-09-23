@@ -106,15 +106,26 @@ ollama pull hermes3:8b
 
 ### Step 1.3 — Local vision AND heavy local text: llama.cpp, NOT Ollama
 
-**Do not try to do this with Ollama.** A VL GGUF ships as two files — the language
-model and a separate `mmproj` projector — and Ollama's Modelfile cannot attach the
-second one. Two `FROM` lines error, `ADAPTER` does not work
-([ollama#14730](https://github.com/ollama/ollama/issues/14730),
-[ollama#9967](https://github.com/ollama/ollama/issues/9967)).
+**Use llama.cpp, not Ollama.** A VL GGUF ships as two files — the language model and
+a separate `mmproj` projector — and importing both through an Ollama Modelfile has a
+documented history of failing **silently**.
 
-The failure mode is why this warning is here: **`ollama create` succeeds**, silently
-dropping the projector. You get a model with `-VL` in its name that cannot see —
-the same silent capability loss that `vision: auto` already caused once.
+In [ollama#9967](https://github.com/ollama/ollama/issues/9967) (Gemma3, Mar 2025,
+closed) the projector is named with a second `FROM`, `ollama show` **displays it**, and
+image input still errors `this model is missing data required for image input`. That is
+the failure mode that matters: create succeeds, vision is gone — the same silent
+capability loss `vision: auto` already caused once in this build.
+
+**Stated at its real strength, because the citations are narrower than "cannot".**
+[ollama#14730](https://github.com/ollama/ollama/issues/14730) is `qwen35moe`, closed as
+a duplicate and root-caused to that architecture's clip runner; there both two `FROM`
+lines and `ADAPTER` failed. Neither issue proves Ollama can *never* do this, and neither
+says anything about `nemotron_v2_vl`. What they establish is a real risk of silent
+capability loss on exactly this path.
+
+llama.cpp is chosen because it is **positively verified** rather than merely
+not-disproven: `llama-server` takes `--mmproj`, and `nemotron_v2_vl` support is in
+llama.cpp PR #19547 by name.
 
 Download both files (≈10.5 GB total):
 
@@ -130,10 +141,28 @@ there is only one; if you have only the first file, vision will not work.
 
 #### Get llama.cpp
 
-Requires **b6315 or later** — that is where `nemotron_h`, this model's hybrid
-Mamba-Transformer architecture, became supported. An older build refuses to load
-rather than degrading, which is the good failure. Current nightlies are around
-**b11118** (checked 2026-09-23), so any recent build clears the floor comfortably.
+**Take a build from mid-2026 or later.** Current nightlies are around **b11118**
+(checked 2026-09-23) and carry everything needed.
+
+> **This floor was wrong until 2026-09-23.** It read "b6315 or later, that is where
+> `nemotron_h` became supported". True — of a different model. `nemotronh` is the
+> **text** Nemotron Nano v2's hybrid mamba2/attention arch, llama.cpp PR **#15507**,
+> merged 2025-08-29, which is what b6315 dates to. It was researched when the text
+> model held this slot and carried over unchanged when the slot became the VL model.
+>
+> This model is **`nemotron_v2_vl`**, and it needs two PRs:
+>
+> | PR | What | Merged |
+> |---|---|---|
+> | **#19547** | Add Nemotron Nano 12B v2 VL support | 2026-02-12 |
+> | **#23638** | `mtmd`: dynamic hi-res tiling for `nemotron_v2_vl` | ~2026-05-25 |
+>
+> **#23638 is not optional here.** Without it the projector encodes every image at a
+> fixed 256 tokens regardless of resolution, and `--image-min-tokens` /
+> `--image-max-tokens` are silently ignored (issue **#25317**, which calls the result
+> "effectively unusable" for document images). This tier exists to read installer
+> dialogs and terminal output from screenshots. A build missing #19547 refuses to
+> load — the good failure. One missing #23638 loads, sees, and reads them badly.
 
 Releases are at <https://github.com/ggml-org/llama.cpp/releases>. Take a `b#####` tag,
 **not** a `v0.4.x` one — the `v` releases carry no Windows binaries. Pick one zip:

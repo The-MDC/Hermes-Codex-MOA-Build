@@ -86,8 +86,8 @@ cannot see.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** — taken from the handoff,
   never reachable from the build container. A wrong URL fails loudly; a wrong
   `tools.include` fails silently by filtering everything out.
-- **Whether llama.cpp b6315+ actually loads this VL model with its projector.** The
-  GGUF and the mmproj both exist and `nemotron_h` is supported; the two together on
+- **Whether a current llama.cpp build actually loads this VL model with its projector.** The
+  GGUF and the mmproj both exist and `nemotron_v2_vl` is supported (PR #19547); the two together on
   a real build is the part nothing here can exercise. It fails loudly if not.
 
 `pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep` now reads each provider's
