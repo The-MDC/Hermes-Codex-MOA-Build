@@ -127,21 +127,67 @@ hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
 `...VL-BF16-mmproj.gguf` at about **1.69 GB**. The projector is not quantized and
 there is only one; if you have only the first file, vision will not work.
 
-Then serve both. Requires **llama.cpp b6315 or later** — that is where `nemotron_h`,
-this model's hybrid Mamba-Transformer architecture, became supported. An older build
-refuses to load rather than degrading, which is the good failure.
+#### Get llama.cpp
+
+Requires **b6315 or later** — that is where `nemotron_h`, this model's hybrid
+Mamba-Transformer architecture, became supported. An older build refuses to load
+rather than degrading, which is the good failure. Current nightlies are around
+**b11118** (checked 2026-09-23), so any recent build clears the floor comfortably.
+
+Releases are at <https://github.com/ggml-org/llama.cpp/releases>. Take a `b#####` tag,
+**not** a `v0.4.x` one — the `v` releases carry no Windows binaries. Pick one zip:
+
+| Asset | When |
+|---|---|
+| `llama-b#####-bin-win-cuda-12.4-x64.zip` | NVIDIA GPU, driver for CUDA 12.x |
+| `llama-b#####-bin-win-cuda-13.4-x64.zip` | NVIDIA GPU, newer driver |
+| `llama-b#####-bin-win-cpu-x64.zip` | no NVIDIA GPU, or unsure |
+| `llama-b#####-bin-win-cpu-arm64.zip` | Snapdragon X / ARM laptop |
+
+**A CUDA build also needs its runtime.** Download the matching
+`cudart-llama-bin-win-cuda-<same-version>-x64.zip` and unzip it **into the same
+folder**. Without it `llama-server.exe` exits immediately on a missing DLL, and the
+error does not mention CUDA.
+
+```powershell
+$dest = "$HOME\llama.cpp"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+# unzip BOTH archives into $dest, then:
+$env:PATH = "$dest;$env:PATH"
+llama-server --version
+```
+
+**Success:** a version line carrying a `b#####` number ≥ 6315.
+
+#### Serve it
 
 ```powershell
 $m = "$HOME\Models\nemotron-nano-12b-v2-vl"
 llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
              --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
              --alias nemotron-nano-12b-v2-vl `
-             --host 127.0.0.1 --port 8080
+             --host 127.0.0.1 --port 8080 `
+             -c 16384 -ngl 99 --jinja
 ```
 
-**`--alias` is load-bearing.** Without it llama-server names the model after its
-file path, `config.yaml`'s `local-vl.default_model` stops matching, and
-`hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+Four of those decide whether this works on a laptop:
+
+- **`--alias` is load-bearing.** Without it llama-server names the model after its
+  file path, `config.yaml`'s `local-vl.default_model` stops matching, and
+  `hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+- **`-c 16384`** matches `local-vl.context_length` in `config.yaml`. Leave it off and
+  llama-server allocates the model's native window; the KV cache, not the weights, is
+  what exhausts a 16 GB laptop. Raise both numbers together or neither.
+- **`-ngl 99`** offloads every layer it can to the GPU. A CPU-only build ignores it,
+  so it is safe to leave in. Lower it toward `-ngl 20` if VRAM is the limit — the
+  model still runs, just slower.
+- **`--jinja`** uses the model's own chat template. Step 1.4's tool-call probe fails
+  without it, and it fails as *prose about calling a tool* rather than as an error.
+
+**`--host 127.0.0.1` is deliberate.** The server takes no key — `local-vl.api_key` is
+the literal placeholder `"no-key-required"` — so binding `0.0.0.0` would put an
+unauthenticated model endpoint on the local network. If it genuinely has to leave the
+box, put a reverse proxy in front and add auth there.
 
 **Success:**
 
@@ -151,8 +197,25 @@ file path, `config.yaml`'s `local-vl.default_model` stops matching, and
 
 prints exactly `nemotron-nano-12b-v2-vl`.
 
-Leave it running. The `vision` auxiliary slot routes here, so a stopped server is a
-missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
+#### Keep it running
+
+The `vision` slot and all heavy local text route here, so a stopped server is a
+missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason. A
+terminal window someone can close is not a deployment. Pick one:
+
+1. **Windows service via NSSM** — survives logout and reboot, restarts on crash.
+   `nssm install llama-vl "$HOME\llama.cpp\llama-server.exe"`, set the arguments and
+   startup directory, then `nssm start llama-vl`. Use this before relying on the tier,
+   and definitely before handing the machine off.
+2. **Scheduled Task at log on** — `schtasks /create /tn llama-vl /sc onlogon /rl
+   highest /tr "...\llama-server.exe <args>"`. No extra software; does not survive a
+   logged-out reboot.
+3. **A pinned terminal** — what the bare command above gives you. Fine while bringing
+   the stack up, wrong for anything after.
+4. **Docker** with `--restart unless-stopped`. Clean lifecycle, but GPU passthrough on
+   Windows adds a layer and the model files have to be mounted in.
+
+Start at 3 to prove it works, then move to 1.
 
 **If you would rather not run a second local service,** revert `vision` in
 `config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`. That model
