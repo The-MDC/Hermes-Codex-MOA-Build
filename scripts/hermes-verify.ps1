@@ -240,6 +240,24 @@ if ($hermes) {
     if ($mcpOut -match 'hermes-council' -and $mcpOut -match '(?i)error|failed|unsupported') {
         Warn 'hermes-council is erroring - check WHICH interpreter it ran under (scripts/hermes-blockers.ps1) before suspecting packages'
     }
+    # Upstream optional skills this build DEPENDS on, declared in capabilities.yaml's
+    # `upstream_skills` section. They ship with Hermes rather than with this repo, so
+    # check-capabilities.py cannot see them -- it only walks this tree. The box is the
+    # only place the question "is it actually enabled?" has an answer, so it is asked
+    # here. Warn rather than Fail: each one is a capability gap, not a broken install.
+    if ($Stage -ne 'a') {
+        $skillOut = (& hermes skills list 2>&1 | Out-String)
+        $upstream = @{
+            'searxng-search'             = 'web.search_backend is searxng and nothing teaches its use'
+            'mcporter'                   = 'the only way to diagnose a silently-filtered MCP server'
+            'subagent-driven-development' = 'delegation and moa are configured but untaught'
+        }
+        foreach ($s in $upstream.Keys) {
+            if ($skillOut -match [regex]::Escape($s)) { Ok "upstream skill $s enabled" }
+            else { Warn "upstream skill $s NOT enabled - $($upstream[$s])" }
+        }
+    }
+
     # Same check, one runtime over. config.yaml names this launcher as codex-mcp's
     # command, and an unset variable means the server never starts -- which surfaces
     # as the Codex tools simply being absent, not as an error.

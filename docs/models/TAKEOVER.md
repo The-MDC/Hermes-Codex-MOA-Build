@@ -463,6 +463,35 @@ Both `operations/` skills are also declared for the **Claude surface** in
 handoff: it is what lets the model *instructing* this build see the same two skills the
 local tier is being handed, instead of only Hermes seeing them.
 
+### Step 3.4a — Enable the three upstream skills this build relies on
+
+Hermes ships 24 categories of **optional** skills in its own tree, disabled by
+default. Three of them back capabilities this config already turns on, and without
+them those capabilities exist only on paper:
+
+| Skill | Why this build needs it |
+|---|---|
+| `research/searxng-search` | `web.search_backend` is `searxng`. The backend is configured and the container documented; nothing taught the agent to use it. |
+| `mcp/mcporter` | List, auth and call MCP servers from the terminal. This build runs 8 MCP servers and has lost time to three separate **silent** MCP failures. It is the only tool here that can diagnose them. |
+| `software-development/subagent-driven-development` | `delegation` routes subagents to `custom:nvidia-nim` and `moa` aggregates through it. Both configured, neither taught. |
+
+```powershell
+$opt = "<hermes-repo>\optional-skills"
+$dest = Join-Path $HOME '.hermes\skills'
+Copy-Item "$optesearch\searxng-search"                      $dest -Recurse -Force
+Copy-Item "$opt\mcp\mcporter"                                 $dest -Recurse -Force
+Copy-Item "$opt\software-development\subagent-driven-development" $dest -Recurse -Force
+hermes skills list
+```
+
+**Success:** all three appear in `hermes skills list`. `hermes-verify.ps1` warns for
+each one that does not, from stage `b` onward.
+
+**Do not port a Claude equivalent for these.** They are already in Hermes format.
+`scripts/port-skills-to-hermes.js` exists to convert skills Hermes does *not* ship —
+porting over something upstream already has is how `pptx` came to carry 1.3 MB of
+duplicate OOXML schemas before it was caught.
+
 ### Step 3.5 — Restart the gateway
 
 ```powershell

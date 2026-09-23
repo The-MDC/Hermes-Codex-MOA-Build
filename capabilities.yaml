@@ -758,7 +758,41 @@ mcp_servers:
   surfaces:
   - hermes
   asymmetry_reason: local to the Hermes runtime; Claude Code has no equivalent need for it
+# ---------------------------------------------------------------------------
+# UPSTREAM OPTIONAL SKILLS this build depends on.
+#
+# Hermes ships 24 categories under optional-skills/ in its own tree, already in
+# Hermes format. They are NOT in this repo and are NOT disk-checked by
+# scripts/check-capabilities.py -- they live in the Hermes install, so the only
+# honest place to check them is on the box. scripts/hermes-verify.ps1 does that.
+#
+# WHY THIS SECTION EXISTS AT ALL. The registry's contract is that every capability is
+# declared once. Three capabilities this build genuinely relies on were declared
+# nowhere, because they are upstream's rather than ours -- exactly the gap the
+# registry exists to close, just pointing the other way.
+#
+# AND WHY PORTING IS THE WRONG TOOL FOR THESE. scripts/port-skills-to-hermes.js
+# converts CLAUDE skills into Hermes format. These are already Hermes-native. Porting
+# a Claude equivalent where upstream ships one is how `pptx` came to carry 1.3 MB of
+# duplicate OOXML schemas. Enable upstream's; port only what upstream lacks.
+upstream_skills:
+- name: searxng-search
+  category: research
+  why: 'web.search_backend is set to searxng and the config documents running the
+    container, but nothing taught the agent to USE it. A configured backend with no
+    skill behind it is a capability on paper.'
+- name: mcporter
+  category: mcp
+  why: 'list, auth and call MCP servers from the terminal. This build runs 8 MCP servers
+    and has lost time to three separate SILENT MCP failures: supervisor runtime
+    substitution, `codex mcp list` reporting Unsupported, and a tools.include filter
+    that can filter everything out without erroring. None of our own skills diagnose those.'
+- name: subagent-driven-development
+  category: software-development
+  why: 'delegation routes subagents to custom:nvidia-nim and moa aggregates through it.
+    Both are configured and neither is taught. This executes plans via delegate_task
+    with a two-stage review.'
+
 datasets: []
 plugins: []
 artifacts: []
-
