@@ -2,7 +2,7 @@
 name: market-research
 description: "> Conduct market research, competitive analysis, investor due diligence, and industry intelligence with source attribution and decision-oriented summaries. Use when user wants market sizing, competitor comparisons, fund research, technology scans, or research that informs business decisions. Triggers on \"competitive analysis\", \"market sizing\", \"TAM/SAM/SOM\", \"research competitors\", \"investor diligence\", \"industry research\", \"compare X vs Y\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

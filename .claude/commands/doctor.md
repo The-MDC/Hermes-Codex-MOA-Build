@@ -5,7 +5,7 @@ Check whether this machine and this checkout can actually do the work — before
 ## Run it
 
 ```bash
-bash scripts/madhats-doctor.sh
+bash scripts/repo-doctor.sh
 ```
 
 Add `--quiet` to print only warnings and failures (useful in CI or a hook).

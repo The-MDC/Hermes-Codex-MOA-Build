@@ -30,9 +30,10 @@ Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.
 parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       1.6T / 49B active, 1M ctx
 subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b high-compute delegation
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
-floor       custom:local         hermes3:8b + nemotron-nano:12b-v2 (Ollama)
+floor       custom:local         hermes3:8b                        Ollama, 5 aux slots
 
-vision      custom:local-vl      nemotron-nano-12b-v2-vl           llama.cpp :8080, NOT Ollama
+vision +    custom:local-vl      nemotron-nano-12b-v2-vl           llama.cpp :8080, NOT Ollama
+heavy local                                                        images AND heavy local text
 
 auxiliary   5 slots -> hermes3:8b          routing, classification, titles, approval, curator
             2 slots -> V4.1-Flash          compression, web_extract
@@ -77,9 +78,9 @@ Three structural rules hold this together. Breaking any one fails **silently**:
 Be explicit about these. Each is the dangling-reference class that CI structurally
 cannot see.
 
-- **Whether `nemotron-nano:12b-v2` is imported into Ollama**, and whether its chat
-  template produces real `tool_calls` rather than prose about calling a tool. The
-  GGUF source repo exists; the import is a local step nothing here can observe.
+- **Whether `llama-server` is serving the VL model with its projector attached**, and
+  whether it produces real `tool_calls` rather than prose about calling a tool. The
+  GGUF source repo exists; serving it is a local step nothing here can observe.
 - **Whether `hermes3:8b` is pulled on the box.** The registry has it (see the table
   above); the disk is the open question.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** — taken from the handoff,
@@ -239,13 +240,8 @@ in use — guarding nothing while looking green.
   Cloudflare `Workers Builds` check that used to fail in 0s on every commit was
   disconnected; if it ever reappears, the integration has been re-attached and the
   fix is again on the Cloudflare or GitHub-App side, never in this repo.
-- Canonical numbers (fee 1.88%, community 28.8%, creator 40%, pre-money $12M) still
-  need explicit approval to change, and `CLAUDE.md` is still their only declaration.
-  **CI no longer enforces that.** The gate and `scripts/check-canonical-numbers.js`
-  were removed with the owner's explicit approval; agreement is now a reviewer's
-  checkbox in `.github/PULL_REQUEST_TEMPLATE.md`. Nothing automated will catch a
-  drifted restatement, and a drifted one reads exactly as plausibly as the correct
-  figure — so check a restatement against `CLAUDE.md`, never against memory.
+- Product content has been removed from this repo entirely. It is the Hermes +
+  Codex orchestration build and carries no company, branding or business figures.
 - No key-shaped string may enter `config.yaml`; CI and the preflight both reject it.
 - Verify before claiming. Several statements in this repo's history were plausible,
   confidently written, and wrong.

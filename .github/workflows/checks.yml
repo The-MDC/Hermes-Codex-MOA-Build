@@ -24,7 +24,7 @@
 #        .github/workflows/agentic-compile.yml. Putting a real workflow in this PR's own
 #        diff is the fix.
 #
-# Deliberately does NOT gate on scripts/madhats-doctor.sh yet. The doctor currently
+# Deliberately does NOT gate on scripts/repo-doctor.sh yet. The doctor currently
 # exits 1 on a real, pre-existing bug — .claude/hooks/hooks.json references 15 scripts
 # under .cursor/hooks/, a directory that does not exist, so none of those hooks have
 # ever run. Gating on it now would paint CI red for a defect this workflow did not
@@ -421,7 +421,7 @@ jobs:
       # requires that asymmetry be DECLARED, with a reason.
       #
       # It also validates skill frontmatter, which nothing did before. That is not
-      # theoretical: four skills shipped unreachable, three of them MAD Gambit ones,
+      # theoretical: four skills shipped unreachable, three of them since removed,
       # because a skill with a missing metadata block loads fine and simply never fires.
       - name: Capabilities match capabilities.yaml
         shell: bash
@@ -442,28 +442,21 @@ jobs:
           while IFS= read -r ref; do
             checked=$((checked+1))
             [ -f "$ref" ] || { echo "DEAD: $ref"; dead=$((dead+1)); }
-          done < <(grep -rhoE 'docs/[a-zA-Z0-9/_-]+\.md' docs scripts SETUP.md configs .github 2>/dev/null | sort -u)
+          done < <(grep -rhoE 'docs/[a-zA-Z0-9/_-]+\.md' docs scripts configs .github 2>/dev/null | sort -u)
           echo "checked $checked doc reference(s)"
           [ "$checked" -gt 0 ] || { echo "found none — the grep is broken"; exit 1; }
           [ "$dead" -eq 0 ] || exit 1
 
-      # The canonical-numbers gate was removed here with the owner's explicit
-      # approval, along with scripts/check-canonical-numbers.js. Two steps went:
-      # the checker itself, and an assertion that the checker had not silently
-      # examined nothing.
+      # A gate used to live here comparing product figures across the tree, together
+      # with scripts/check-canonical-numbers.js and an assertion that the checker had
+      # not silently examined nothing. It went when the product content went: this
+      # repo is the Hermes + Codex orchestration build and states no such figures, so
+      # the gate now has nothing to compare and could only ever pass vacuously.
       #
-      # WHAT IS AND IS NOT GONE. The numbers are still canonical, and CLAUDE.md is
-      # still their single declaration — that did not change and needs no CI to be
-      # true. What is gone is the automated comparison against every restatement in
-      # the tree. Agreement is now checked by a human at review time, via the
-      # "Canonical numbers" section of .github/PULL_REQUEST_TEMPLATE.md.
-      #
-      # THE TRADE, STATED PLAINLY, because the removed script's own header argued
-      # the opposite case and that argument was not wrong. A drifted restatement
-      # ("1.8%" for "1.88%") is invisible to a reader, who has no way to know which
-      # copy is canonical. Nothing now catches that automatically. Against it: the
-      # gate walked the whole repo on every PR, so a change that merely reworded a
-      # sentence near a number could fail CI for a reason unrelated to the diff —
-      # and a check that fires on unrelated work gets routed around rather than read.
-      # Recorded here rather than deleted quietly, so a future session re-adding a
-      # gate knows what the last one cost.
+      # Recorded rather than deleted quietly, because it cost something worth knowing:
+      # the gate walked the WHOLE repo on every PR, so a change that merely reworded a
+      # sentence near a number failed CI for a reason unrelated to the diff — and a
+      # check that fires on unrelated work gets routed around rather than read. A
+      # future session adding a repo-wide content gate should scope it to the files
+      # that can actually carry the thing being checked. The port script's own scrub
+      # assertion is scoped that way: it reads only the tree it just wrote.

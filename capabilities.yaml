@@ -388,13 +388,6 @@ skills:
   - hermes
   source: ported
   category: finance
-- name: investor-pitch
-  surfaces:
-  - claude
-  source: claude-native
-  category: madhats
-  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
-    knowledge useful outside Claude''s own surface'
 - name: learn
   surfaces:
   - hermes
@@ -414,18 +407,6 @@ skills:
   - hermes
   source: hand-written
   category: operations
-- name: mad-gambit-ai-agents
-  surfaces:
-  - hermes
-  source: ported
-  category: madhats
-  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
-- name: mad-gambit-context
-  surfaces:
-  - hermes
-  source: ported
-  category: madhats
-  asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
 - name: market-research
   surfaces:
   - claude
@@ -456,13 +437,6 @@ skills:
   - claude
   source: claude-native
   category: product
-  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
-    knowledge useful outside Claude''s own surface'
-- name: mpp-platform
-  surfaces:
-  - claude
-  source: claude-native
-  category: madhats
   asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
     knowledge useful outside Claude''s own surface'
 - name: pdf-reading
@@ -558,13 +532,6 @@ skills:
   source: ported
   category: autonomous-ai-agents
   asymmetry_reason: ported from an external source or hand-written for Hermes; has no counterpart in .claude/skills/
-- name: smart-contracts
-  surfaces:
-  - claude
-  source: claude-native
-  category: madhats
-  asymmetry_reason: 'not in the port manifest: scripts/port-skills-to-hermes.js INCLUDE selects what carries
-    knowledge useful outside Claude''s own surface'
 - name: solidity-foundry
   surfaces:
   - hermes

@@ -2,7 +2,7 @@
 name: solidity-foundry
 description: "> Solidity smart contract development with Foundry — testing, deployment, gas optimization, OpenZeppelin patterns, prediction market contracts, ERC-4337 integration, and Chainlink oracle patterns. Use when writing, testing, auditing, or deploying Solidity contracts. Triggers on \"smart contract\", \"Solidity\", \"Foundry\", \"forge\", \"cast\", \"deploy contract\", \"ERC-20\", \"ERC-721\", \"prediction market contract\", \"oracle\", \"Chainlink\", \"Pyth\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:
@@ -14,14 +14,14 @@ metadata:
 
 # Solidity + Foundry
 
-Smart contract development for MAD Gambit on Base L2.
+Smart contract development on Base L2.
 
 ## Project Setup
 
 ```bash
 # Init Foundry project
-forge init mad-gambit-contracts
-cd mad-gambit-contracts
+forge init example-contracts
+cd example-contracts
 
 # Install dependencies
 forge install OpenZeppelin/openzeppelin-contracts
@@ -55,9 +55,9 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract MADMarket is ReentrancyGuard, Ownable, Pausable {
-    uint256 public constant PLATFORM_FEE_BPS = 188; // 1.88%
+    uint256 public constant PLATFORM_FEE_BPS = 250; // 2.5%
     uint256 public constant CREATOR_SHARE_BPS = 4000; // 40%
-    uint256 public constant COMMUNITY_SHARE_BPS = 2880; // 28.8% (display 28%)
+    uint256 public constant COMMUNITY_SHARE_BPS = 1000; // 10%
     uint256 public constant BPS_DENOMINATOR = 10_000;
 
     struct Market {

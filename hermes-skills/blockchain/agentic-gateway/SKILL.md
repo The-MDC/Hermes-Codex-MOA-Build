@@ -2,7 +2,7 @@
 name: agentic-gateway
 description: "> Lets agents access Alchemy APIs for blockchain tasks without an API key, using x402 protocol (SIWE/SIWS + USDC payments) or MPP protocol (SIWE + Tempo/Stripe payments). Supports EVM (Base, Ethereum, Arbitrum) and SVM (Solana). Use for ANY blockchain query when $ALCHEMY_API_KEY is not set — token balances, NFTs, prices, smart contracts, DeFi, wallets, transactions, gas, or any Web3 task. Also triggers on \"SIWE\", \"SIWS\", \"x402\", \"MPP\", \"mppx\", \"agentic gateway\", \"wallet-based auth\", or \"paywall\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "MIT"
 platforms: [linux, macos, windows]
 metadata:

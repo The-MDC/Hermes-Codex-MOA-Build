@@ -2,7 +2,7 @@
 name: local-desktop
 description: "Use this skill for ANY request that touches the machine Hermes is running on: running a command, inspecting or editing files, driving a CLI or an interactive terminal app, installing or checking software, reading logs, checking whether a port or service is up, or automating a multi-step local workflow. Also use it whenever a task would otherwise mean many small tool calls in a row over local data. It describes Hermes' OWN local tools — terminal, process and execute_code — not any Claude or IDE surface. Triggers on: run this, check the file, what is in, is it installed, start the server, is the port open, read the log, rename these, automate this locally, on my machine, on the box, desktop, shell, terminal, PowerShell, bash."
 version: 1.0.0
-author: "MADHATs — written for this Hermes build"
+author: "Written for this Hermes build"
 license: "MIT"
 platforms: [linux, macos, windows]
 metadata:

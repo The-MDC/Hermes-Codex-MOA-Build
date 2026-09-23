@@ -23,8 +23,8 @@
 #   subagents   NVIDIA NIM     Nemotron-3-Super-120B     high-compute delegation
 #   fallback    OpenRouter     DeepSeek-V4.1-Flash       552B, 8B/16B active, 1M ctx
 #   floor       your laptop    hermes3:8b (Ollama)       support, routing, memory
-#               (same tier)    nemotron-nano:12b-v2      heavier local work
-#   vision      your laptop    nemotron-nano-12b-v2-vl   llama.cpp :8080, NOT Ollama
+#   vision +    your laptop    nemotron-nano-12b-v2-vl   llama.cpp :8080, NOT Ollama
+#   heavy local                                          images AND heavy local text
 #
 # THE VISION TIER IS A SEPARATE SERVER ON PURPOSE. Ollama cannot attach the mmproj
 # projector a VL GGUF needs, and it fails by silently dropping vision rather than
@@ -51,11 +51,10 @@
 #      1.6T model; the router's coverage at that size is not a given. Run
 #      `hermes models list` on the box. If it is absent, move the parent to
 #      `or-fallback` — also exclusion-safe — rather than renaming a provider.
-#   2. That `nemotron-nano:12b-v2` exists in Ollama. Nothing has imported it yet — the
-#      handoff's download (of an older model, see the `local:` notes) never
-#      completed. A model listed here but absent on the machine is exactly the
-#      dangling reference CI rejects in config and cannot detect on disk.
-#      scripts/hermes-verify.ps1 checks the disk side.
+#   2. That `llama-server` is actually serving `nemotron-nano-12b-v2-vl` on :8080
+#      with its mmproj projector attached. A model listed here but absent on the
+#      machine is exactly the dangling reference CI rejects in config and cannot
+#      detect on disk. scripts/hermes-verify.ps1 checks the disk and port side.
 # ---------------------------------------------------------------------------
 
 providers:
@@ -181,46 +180,26 @@ providers:
     default_model: hermes3:8b
     models:
       - hermes3:8b
-      - nemotron-nano:12b-v2
     discover_models: false
-    # nemotron-nano:12b-v2 is the heavier local model, for work hermes3:8b is too
-    # small for. Q5_K_M of bartowski/nvidia_NVIDIA-Nemotron-Nano-12B-v2-GGUF,
-    # 8.76 GB on disk, ~10 GB resident once KV is allocated.
+    # THE HEAVY LOCAL SLOT IS `local-vl`, NOT A SECOND OLLAMA MODEL.
     #
-    # THIS IS NOT THE MODEL THE 2026-09-22 HANDOFF NAMED. That handoff specified a
-    # Q6_K of bartowski/nvidia_Llama-3.1-Nemotron-Nano-8B-v1-GGUF: published March
-    # 2025, built on Llama-3.1, three Nemotron generations old. Nothing was lost
-    # replacing it — that download never completed, so no local work depended on it.
+    # A text-only nemotron-nano:12b-v2 used to sit here as "the heavier local model".
+    # It was dead weight: nothing routed to it. Not the local default, not any
+    # auxiliary slot, not the fallback chain — it was reachable only by typing
+    # /model by hand, and it cost an 8.76 GB download plus a stage-b install gate to
+    # be reachable that way.
     #
-    # WHY 12B-v2 AND NOT A NEMOTRON 3. The current generation ships the Nano line in
-    # exactly two sizes, 4B and 30B-A3B, with nothing between them:
+    # It was also redundant by the time it landed. Nemotron-Nano-12B-v2-VL is the
+    # SAME generation and size with a vision encoder on top, and it is already being
+    # downloaded for the `local-vl` provider below. Keeping both meant two copies of
+    # ~9 GB of nearly identical weights, one of which could not see.
     #
-    #   Nemotron-3-Nano-4B            ~3 GB      too small for the heavy slot
-    #   Nemotron-Nano-12B-v2 Q5_K_M   8.76 GB <- chosen
-    #   Nemotron-3-Nano-30B-A3B Q4_K_M 22.42 GB (ggml-org) / 24.57 GB (unsloth)
+    # So heavy local work goes to `custom:local-vl` on :8080. hermes3:8b stays here
+    # as the floor and the auxiliary workhorse, which is what an 8B is genuinely good
+    # at — routing, classification, short structured output, tool selection.
     #
-    # The 30B is MoE and activates only 3B per token, so it DECODES like a small
-    # model — but MoE does nothing for the memory floor: every one of the 30B has to
-    # stay resident. 22.42 GB is above the 21.2 GB that already disqualified a 35B
-    # here, so it is a 32 GB machine, not an ordinary one. Taking it would repeat the
-    # exact mistake docs/models/local-floor.md exists to record.
-    #
-    # The cost of this choice is honest: 12B-v2 is the Nemotron 2 generation (August
-    # 2025), so the local tier no longer shares a template and tool-call convention
-    # with the Nemotron 3 model on nvidia-nim. That matters much less for a floor
-    # than for a parent, and it buys 3x the parameters of the 4B inside the RAM
-    # budget, which is the whole point of this slot.
-    #
-    # Q5_K_M rather than Q4_K_M on purpose. Quantization damage is proportionally
-    # worse on a smaller model, and at 12B this is near-Q6 quality for ~15% less
-    # resident memory. Drop to Q4_K_M (~7.1 GB) only if 16 GB is genuinely tight;
-    # NVIDIA-Nemotron-Nano-9B-v2 (~6.5 GB at Q5) is the better move if it is.
-    #
-    # Verify TOOL CALLING, not just generation, before relying on it: a wrong chat
-    # template degrades tool use silently while ordinary chat looks fine.
-    #
-    # KV cache is what hurts on a laptop, not the weights, so this sits far below
-    # either model's native window. Raise it only as far as RAM tolerates.
+    # KV cache is what hurts on a laptop, not the weights, so this sits far below the
+    # model's native window. Raise it only as far as RAM tolerates.
     context_length: 32768
 
   local-vl:
@@ -387,7 +366,6 @@ web:
 #   /model custom:nvidia-nim:nvidia/nemotron-3-super-120b-a12b
 #   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
 #   /model custom:local:hermes3:8b
-#   /model custom:local:nemotron-nano:12b-v2
 #   /model custom:local-vl:nemotron-nano-12b-v2-vl      (needs llama-server on :8080)
 # ---------------------------------------------------------------------------
 excluded_providers:

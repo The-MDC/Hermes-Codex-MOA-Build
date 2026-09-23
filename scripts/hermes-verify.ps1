@@ -23,7 +23,7 @@ param(
     # pass -- so each stage only requires what it was supposed to deliver.
     #
     #   a     hermes3:8b only. The minimal working floor.
-    #   b     adds nemotron-nano:12b-v2 and the Codex bridge.
+    #   b     adds the llama-server vision runner and the Codex bridge.
     #   full  everything, including the hosted MCP servers. (default)
     [ValidateSet('a', 'b', 'full')]
     [string]$Stage = 'full',
@@ -149,16 +149,14 @@ if ($ollama) {
     # A tag mismatch is not a loud failure: Hermes resolves the miss by falling
     # back to the main model, so you get an answer from the wrong tier.
     #
-    # Stage a ships hermes3:8b alone, so the heavier model is only REQUIRED from
-    # stage b onward. It is still reported at stage a, as information.
-    $required = if ($Stage -eq 'a') { @('hermes3:8b') }
-                else { @('hermes3:8b', 'nemotron-nano:12b-v2') }
-    foreach ($m in @('hermes3:8b', 'nemotron-nano:12b-v2')) {
+    # Ollama carries the FLOOR only. Heavy local work and every image goes to
+    # llama-server on :8080, checked in its own section below -- Ollama cannot serve
+    # a VL model's vision at all, so there is no second Ollama tag to require here.
+    foreach ($m in @('hermes3:8b')) {
         if ($tags -match [regex]::Escape($m)) { Ok "$m present" }
-        elseif ($m -in $required) {
+        else {
             Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back"
         }
-        else { Info "$m not present yet - not required until stage b" }
     }
 
     $port = Test-Port '127.0.0.1' 11434

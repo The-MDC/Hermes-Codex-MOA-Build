@@ -13,8 +13,8 @@ the local runner, and every earlier version of this table left that unsaid.
 
 | Actor | Available | Does | Does not |
 |---|---|---|---|
-| **A human, or Claude** | from the start | Phases 0 through step 1.7, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
-| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.7 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
+| **A human, or Claude** | from the start | Phases 0 through step 1.3, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
+| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.3 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
 | **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
 
 **Why a vision model runs this runbook.** The loop below is "compare the output to
@@ -25,12 +25,12 @@ the Cloudflare and Render dashboard pages — a text-only runner sees none of it
 because none of it arrives on stdout. Several success lines in this file describe
 exactly those things. Hand the VL model a screenshot and it can check them.
 
-**It reads and reports; it does not execute — until step 1.8 says otherwise.** This
+**It reads and reports; it does not execute — until step 1.4 says otherwise.** This
 model was imported from a bare GGUF with no `TEMPLATE` directive, so its tool-calling
 convention is unverified, and a wrong template degrades tool use while ordinary chat
 looks perfect. Commands stay in the shell a human or the harness drives.
 
-**Step 1.8 is the gate that lifts this.** It runs two probes against :8080 — one that
+**Step 1.4 is the gate that lifts this.** It runs two probes against :8080 — one that
 the model genuinely sees an image, one that it emits real `tool_calls` — and its
 outcome table says which of the three roles this runner may actually hold. Do not
 promote it to driving execution on the strength of ordinary chat looking fine; that
@@ -38,8 +38,8 @@ is exactly what a wrong template hides. (`VSCODE-QUICKSTART.md` §2.6 is the equ
 probe for the two **Ollama** models on :11434; it does not cover this one.)
 
 **The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
-`llama-server` on `127.0.0.1:8080`, and step 1.7 is what starts it. Before that it
-has no backend, so it cannot be the thing checking step 1.7's own success line.
+`llama-server` on `127.0.0.1:8080`, and step 1.3 is what starts it. Before that it
+has no backend, so it cannot be the thing checking step 1.3's own success line.
 The same was quietly true of the model this table used to name — imported at step
 1.4 — which is how a runbook ends up implying a model runs the steps that create it.
 
@@ -103,99 +103,7 @@ ollama pull hermes3:8b
 
 **Success:** `ollama list` now shows `hermes3:8b`.
 
-### Step 1.3 — Import the Nemotron floor
-
-Download the Q5_K_M only. **Not** `bartowski/nvidia_Llama-3.1-Nemotron-Nano-8B-v1-GGUF`
-— that is a March 2025 Llama-3.1 model, three Nemotron generations old, and not
-what this config names.
-
-The `--include` filter matters: the repo holds every quant, and without it you
-pull tens of GB you will not use.
-
-```powershell
-hf download bartowski/nvidia_NVIDIA-Nemotron-Nano-12B-v2-GGUF `
-  --include '*Q5_K_M*.gguf' `
-  --local-dir "$HOME\Models\nemotron-nano-12b-v2" `
-  --max-workers 4
-```
-
-**Success:** exactly one `.gguf` of about **8.76 GB** exists under that directory.
-
-```powershell
-Get-ChildItem "$HOME\Models\nemotron-nano-12b-v2" -Filter *.gguf |
-  Select-Object Name, @{n='GB';e={[math]::Round($_.Length/1GB,2)}}
-```
-
-If the machine has under 16 GB of RAM, stop and escalate rather than continuing:
-`NVIDIA-Nemotron-Nano-9B-v2` at Q5 (~6.5 GB) is the substitution, and swapping it
-means editing `config.yaml` in the repo, which is a Sonnet action.
-
-**ESCALATE** if the directory is empty after the command returns. The previous
-attempt at this step, with the older model, failed exactly this way: the command
-returned, the file never appeared.
-
-### Step 1.4 — Register it with Ollama
-
-Write a `Modelfile` next to the GGUF, substituting the actual filename:
-
-```
-FROM ./<the-file>.gguf
-```
-
-Then:
-
-```powershell
-cd "$HOME\Models\nemotron-nano-12b-v2"
-ollama create nemotron-nano:12b-v2 -f .\Modelfile
-```
-
-**Success:** `ollama list` shows `nemotron-nano:12b-v2`. The tag must match exactly —
-`config.yaml` names this string, and a mismatch resolves to nothing.
-
-### Step 1.5 — Prove generation
-
-```powershell
-ollama run nemotron-nano:12b-v2 "Reply with exactly: ready"
-```
-
-**Success:** the reply contains `ready`.
-
-### Step 1.6 — Prove TOOL CALLING
-
-Do not skip this. It is the step that catches a wrong chat template, and a wrong
-template degrades tool use silently while ordinary chat looks fine.
-
-```powershell
-$body = @{
-  model = 'nemotron-nano:12b-v2'
-  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
-  tools = @(@{
-    type = 'function'
-    function = @{
-      name = 'get_weather'
-      description = 'Get current weather for a city'
-      parameters = @{
-        type = 'object'
-        properties = @{ city = @{ type='string' } }
-        required = @('city')
-      }
-    }
-  })
-} | ConvertTo-Json -Depth 10
-
-(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/v1/chat/completions' `
-  -ContentType 'application/json' -Body $body).choices[0].message |
-  ConvertTo-Json -Depth 10
-```
-
-**Success:** the response contains a `tool_calls` array naming `get_weather`.
-**Failure looks like:** prose describing the weather, or prose describing the tool
-it would call. Both mean the template is wrong.
-
-**ESCALATE** on failure. The fix is a `TEMPLATE` directive in the Modelfile, and
-choosing it is a judgment call.
-
-### Step 1.7 — Local vision: llama.cpp, NOT Ollama
+### Step 1.3 — Local vision AND heavy local text: llama.cpp, NOT Ollama
 
 **Do not try to do this with Ollama.** A VL GGUF ships as two files — the language
 model and a separate `mmproj` projector — and Ollama's Modelfile cannot attach the
@@ -251,7 +159,7 @@ missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
 is natively multimodal and is what fixed the slot originally. One line, no loss
 except offline capability.
 
-### Step 1.8 — Prove the VL model SEES and CALLS TOOLS
+### Step 1.4 — Prove the VL model SEES and CALLS TOOLS
 
 Two probes, and they answer two different questions. Run both.
 
@@ -446,7 +354,7 @@ affect the current one.
 `hermes-skills/` holds 31 skills: 29 Claude skills converted to Hermes format, plus
 two written by hand for this build. They are what let this install carry work on its
 own rather than being a bare model router — research, security audit, investor
-material, the MAD Gambit context. Copying them is a separate step from
+material, local desktop operation. Copying them is a separate step from
 `hermes-apply.ps1`, which installs two config files and nothing else.
 
 ```powershell
@@ -458,8 +366,8 @@ hermes skills list
 
 **Success:** `hermes skills list` shows 31 skills across 12 categories — the eleven
 ported ones (`blockchain`, `software-development`, `security`, `research`, `finance`,
-`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`, `madhats`)
-plus **`operations`**.
+`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`) plus
+**`operations`**.
 
 **`operations` is the one that matters for handing this build over.** The port
 deliberately drops Claude-surface skills, which was correct — they describe tools

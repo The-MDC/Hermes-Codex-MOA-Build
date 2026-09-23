@@ -1,126 +1,114 @@
-# MADHATs Gambit — Claude Code Master Context
+# Hermes–Codex Build — Claude Code context
 
-## Project Identity
-**MADHATs Gambit** — entertainment prediction market platform combining satirical NFT card gaming with Web3 mechanics.
-- Founder/CEO: Nick (MADdegen) | 3x founder, 14+ yrs startup experience, 1 exit
-- Stage: Seed — $1.24M–$2.48M at $12M pre-money. Two nearer-term tranches run separately:
-  infrastructure $15K–$20K and a milestone-based bridge $300K–$500K.
-- GitHub Org: The-MDC (github.com/The-MDC) | 100+ repos
+## What this repo is
 
-## Canonical Numbers — Never Change Without Explicit Approval
-> Reconciled 2026-08-19 against the published data room per Boardy's consolidated brief.
-> Full reconciliation, deltas and open conflicts:
-> `MAD-MPP-2.23/docs/boardy/CANONICAL_NUMBERS_2026-08-19.md`
+A multi-tier model orchestration for Hermes Agent, with the Codex CLI wired in as an
+MCP tool server. Configuration, verification scripts, skills and a bring-up runbook.
 
-- Platform fee: **1.88%** globally — **never 1.888%**
-- Fee split *of the 1.88%*: creator **40%** · community **28.8%** · MAD Shield recovery **28.8%**
-- Creator share applies to **creator-made markets only** — not the general community share
-- MAD Shield: opt-in **2–4%** premium · **28.8%** standard recovery → 40% shielded → 60% VIP (gated)
-- $MADx total supply: **888,888,888** · seed token allocation **10%**
-- Seed: **$1.24M–$2.48M** | Pre-money: **$12M** | SAFE or equity
-- Y3 revenue headline: **$139.6M gross, base case** ($177.7M is bull case ONLY — never the headline)
-- Entity: **New Mexico LLC** (filed) — NOT Wyoming
-- **Live surfaces** (verified 2026-08-20):
-  - Data room (canonical): `https://mad-mpp-2-23-madgambit.vercel.app/pitch/index.html` — built from
-    `The-MDC/MAD-MPP-2.23` → `verify/public/pitch/`. **Currently behind Vercel SSO**, so a link
-    handed to an investor lands on a login page until Deployment Protection is turned off.
-  - Three-Minute Room: `.../pitch/3min.html` · OV deck: `.../pitch/ov-pitch-deck.html`
-  - Investor deck the app links out to: `https://o-vdeck26.vercel.app` — public, no SSO, **stale**
-    (see open conflicts). Referenced from `verify/lib/node-registry.ts` and `portal-tab.tsx`.
-  - ~~`https://maddegen.github.io/MADHATs-Gambit-Presentation/`~~ — **dead**. The repo 404s under
-    both `MADdegen/` and `The-MDC/`. Do not hand this URL to anyone.
-- **Canonical repo**: `The-MDC/MAD-MPP-2.23`. The MAD Gambit main has always lived in
-  `MAD-MPP-2.23`; the repo now sits in the MDC enterprise org. GitHub redirects the old
-  `MADdegen/` path, but Vercel's Git integration did **not** survive the move — see open conflicts.
+**It carries no product content.** No company, no branding, no business figures. If
+you are about to add any, you are in the wrong repo. `SCRUB` in
+`scripts/port-skills-to-hermes.js` removes product references from ported skill
+content, and the port fails if one survives into the output tree.
 
-### ⚠️ Open conflicts — do not state these publicly until resolved
-- **Staking tiers**: code has 6 tiers (100/500/2,500/10,000/50,000/100,000 at 12/18/28/42/58/68%);
-  the data room has 4 (88/888/8,888/88,888 at 8.8/18.8/28.8/38.8%). Do not pitch staking yields.
-- **A second fee model is deployed somewhere**: a "1.888% RATE" schedule splitting burn 0.888% /
-  staking 0.500% / protect 0.500%, with **no creator share**. Locate and reconcile to 1.88%.
-- **Y3 stream split 51/31/12/6** derives from the retired $154.5M model — re-run before use.
-- **The live investor deck says Wyoming.** `o-vdeck26.vercel.app` states "Manager-Managed Wyoming
-  LLC", "Wyoming Legal Guardrails", "Wyoming tax filing" and "Wyoming Registered, SEC Compliant LLC
-  Architecture" — 7 occurrences, checked 2026-08-20. Canon is **New Mexico LLC (filed)**, and
-  "SEC Compliant" / "SEC-exempt token issuance" also breach the no-claim-without-evidence rule.
-  `verify/public/pitch/ov-pitch-deck.html` in this repo is already corrected; the deployed bundle
-  is built from a different source. **Find that source and rebuild before the deck is shown again.**
-- **Vercel is not deploying `MAD-MPP-2.23`.** Last production build 2026-08-19 14:00 UTC; four
-  pushes since produced zero deployments. Merging to `main` does not reach the live site. Deploy
-  with `cd verify && npx vercel --prod` until the Git integration is reconnected to the MDC org.
-- ~~**GitHub Actions is queue-blocked.**~~ **RESOLVED 2026-09-22.** Repo-owned runs now complete
-  in 6-12 seconds; PR #13 went green six consecutive times. Whatever the 2026-08 queue block was
-  (an exhausted org Actions allowance was the theory), it has cleared. Kept struck-through rather
-  than deleted so nobody re-derives the old conclusion from the old symptom.
-- **Cloudflare Workers is attached to this repo and cannot succeed.** A Workers Git integration was
-  connected some time after 2026-09-19 — PRs #11 and #12 have no such check, #13 does. This repo is
-  a Claude Code configuration tree: no `package.json`, no `wrangler.*`, nothing deployable. The build
-  fails in **0 seconds**, before reading the repo, on every commit including docs-only ones, and by
-  2026-09-22 11:30 it was retry-looping several builds per minute on one unchanged commit. No repo
-  change can fix it. Disconnect the Git integration in the Cloudflare dashboard (account
-  `d266f6c59a542bce7394fb28b7580327`, service `madhats-claude-enhancement`) or revoke the GitHub
-  App's access to this repo.
+## The routing
 
-### Never claim without evidence
-"15,000 users" (it is a **waitlist**) · measured retention · "industry's first" · "regulatory-safe" ·
-"no counterparty risk" · "100% DeFi secured" · MAD Shield as **insurance**.
+```
+parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
+subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b  high-compute delegation
+fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
+floor       custom:local         hermes3:8b (Ollama)                offline, 5 aux slots
+vision +    custom:local-vl      nemotron-nano-12b-v2-vl            llama.cpp :8080, NOT Ollama
+heavy local                                                         images AND heavy local text
+```
 
-## Tech Stack
-- Frontend: React 18, TypeScript, Hono/HonoX, TailwindCSS
-- Backend: Neon (Postgres) + Drizzle ORM, Vercel (Next.js API routes), Node.js
-- Blockchain: Solidity, Foundry, OpenZeppelin, Hardhat
-- Chains: **Arbitrum Nova (primary gameplay, 42170)** · Arbitrum One (liquidity, Shield vaults,
-  $MADx, 42161) · Ethereum L1 (governance anchor) · Base L2 (Phase 3) · HyperEVM (AI-agent settlement)
-- Oracles: Chainlink VRF + Price Feeds, Pyth Network
-- AA: Alchemy AA-SDK (ERC-4337), modular-account, light-account
-- Prediction Markets: Polymarket CTF Exchange, UMA protocol, Gnosis conditional tokens
-- AI/Agents: Claude Opus 4.6, MCP servers, GraphRAG, Instructor (structured outputs)
+Three rules that have each cost a session here:
 
-## Brand & Voice
-- Bold, irreverent, technically credible — satire is our product
-- Short sentences. No filler. Specific numbers over adjectives.
-- Banned: "leverage," "synergy," "ecosystem play," "unlock value," "game-changing"
+1. **A model id belongs to the GATEWAY, not the model.** The same weights carry
+   different ids per gateway. `discover_models: false` means Hermes never probes
+   `/models`, so a wrong id does not error — it silently resolves to the main model.
+2. **`auto` in an auxiliary slot means "use the main model".** That is how vision
+   broke silently when the parent changed to a model with no vision encoder.
+3. **A provider named after its own exclusion hides itself.** `excluded_providers`
+   matches case-insensitively against every key a provider surfaces under, which is
+   why the OpenRouter entry is called `or-fallback`.
 
-## Cowork Folder Protocol
-Before every task:
-1. Read ABOUT-ME/ completely — identity, voice, canonical numbers
-2. If task relates to a project, read PROJECTS/{name}/ subfolder
-3. If task has a matching template in TEMPLATES/, study structure (not content)
-4. Use AskUserQuestion tool to gather context before executing
-5. Write all outputs to OUTPUTS/ folder
+## Capabilities
 
-## Skills Available
-All skills are in `.claude/skills/` — organized by domain:
-- marketing/ · sales/ · product/ · engineering/ · data/ · operations/ · legal/ · finance/
-- productivity/ · cowork/ · ecc/ (everything-claude-code enhancements)
+`capabilities.yaml` declares every skill and MCP server once, with its surfaces and a
+required `asymmetry_reason` when it is on one surface only.
+`scripts/check-capabilities.py` makes that binding — it fails the build when disk
+stops matching the declaration.
 
-## Commands Available
-All slash commands in `.claude/commands/`:
-- /orchestrate · /quality-gate · /harness-audit · /learn · /evolve
-- /skill-create · /model-route · /plan · /security · /checkpoint
+Name resolution differs by surface, which matters when adding anything:
 
-## Global Behavior Rules
-1. Always use Opus 4.6 + Extended Thinking for reasoning tasks
-2. Read context files BEFORE generating — never assume
-3. One deliverable per prompt — don't batch unrelated tasks
-4. Create CLAUDE.md updates when patterns emerge from sessions
-5. Output files to OUTPUTS/ — never modify ABOUT-ME/ or TEMPLATES/
-6. Use AskUserQuestion when task needs clarification before execution
-7. Apply security review skill before any smart contract changes
-8. Apply verification-loop skill for all investor-facing documents
+- **Hermes** resolves a skill by its **directory** name — `hermes-skills/<category>/<name>/SKILL.md`
+- **Claude Code** resolves it by the frontmatter **`name`** — `.claude/skills/<category>/<name>.md`
 
-## Hooks Active
+A skill with a malformed `metadata.hermes` block loads without complaint and simply
+never triggers. The gate checks frontmatter for exactly that reason.
+
+Hosted MCP servers are kept out of Hermes on purpose: every discovered tool is
+injected into the system prompt on *every* request, which on a ~40 RPM tier is a
+permanent tax. Asymmetry is legitimate; unexplained asymmetry is not.
+
+## Verification
+
+Run these before trusting a change. Each exists because something passed silently
+that should not have:
+
+```bash
+python3 scripts/check-capabilities.py             # registry vs disk
+node   scripts/port-skills-to-hermes.js           # re-port; prints `scrub: clean`
+node   scripts/port-skills-to-hermes.js --check   # upstream drift, writes nothing
+bash   scripts/repo-doctor.sh                     # toolchain, hooks, egress
+pwsh -File scripts/hermes-verify.ps1              # the acceptance gate, on the box
+```
+
+**A check that cannot fail is not a check, and one that cannot pass is worse.** This
+repo has shipped both: an assertion that hardcoded a retired model and kept passing,
+and a gate that failed on a permanent upstream condition so no install could ever go
+green. When you add an assertion, prove it fails against a deliberately broken input
+before trusting it.
+
+## Changing the config safely
+
+1. Edit the **repo** copy, never the installed one.
+2. Run the CI assertion block from `.github/workflows/checks.yml` locally.
+   `hermes config: OK` is the pass line.
+3. If you touched a model id, check it against **that gateway's** catalog.
+4. `hermes-apply.ps1 -WhatIf`, then for real.
+5. `hermes-verify.ps1 -Stage full -Deep`.
+
+## Behaviour rules
+
+1. Read context files before generating — never assume.
+2. One deliverable per prompt; don't batch unrelated tasks.
+3. Use AskUserQuestion when a task needs clarification before execution.
+4. Apply the `security-review` skill before any production-bound change.
+5. Apply the `verification-loop` skill before opening a PR.
+
+## Skills and commands
+
+Skills live in `.claude/skills/` by domain: marketing, sales, product, engineering,
+data, operations, legal, finance, productivity, cowork, ecc.
+
+Commands live in `.claude/commands/`:
+`/orchestrate` `/quality-gate` `/harness-audit` `/learn` `/evolve` `/skill-create`
+`/model-route` `/plan` `/security` `/checkpoint` `/doctor` `/market-brief`
+
+## Hooks
+
 Wired in `.claude/settings.json` — the only file Claude Code reads hooks from.
-`scripts/madhats-doctor.sh` fails if any of these points at a missing script.
+`scripts/repo-doctor.sh` fails if any of these points at a missing script.
 
-- before-submit-prompt.js — `UserPromptSubmit` — secret scanning on the prompt
-- after-mcp-execution.js — `PostToolUse` / `mcp__.*` — MCP result logging
-- post-edit-check.js — `PostToolUse` / `Write|Edit` — console.log warning, Prettier, `tsc --noEmit`
-- pre-bash-guard.js — `PreToolUse` / `Bash` — blocks `--no-verify` git hook bypass (the only blocking hook)
-- stop-audit.js — `Stop` — console.log sweep across changed files
+- `before-submit-prompt.js` — `UserPromptSubmit` — secret scanning on the prompt
+- `after-mcp-execution.js` — `PostToolUse` / `mcp__.*` — MCP result logging
+- `post-edit-check.js` — `PostToolUse` / `Write|Edit` — console.log warning, Prettier, `tsc --noEmit`
+- `pre-bash-guard.js` — `PreToolUse` / `Bash` — blocks `--no-verify` git hook bypass (the only blocking hook)
+- `stop-audit.js` — `Stop` — console.log sweep across changed files
 
 **Not active**: `session-start.js`, `session-end.js`, `pre-compact.js` and `stop.js`
-are unwired forwarders to Cursor hooks that were never in this repo — they do nothing.
-`.claude/hooks/hooks.json` was a Cursor config (Cursor event names, `.cursor/` paths
-that never existed) and has been removed; Claude Code never read it. See
-`.claude/hooks/README.md`.
+are unwired forwarders to Cursor hooks that were never in this repo — they do
+nothing. `.claude/hooks/hooks.json` was a Cursor config (Cursor event names,
+`.cursor/` paths that never existed) and has been removed; Claude Code never read it.
+See `.claude/hooks/README.md`.

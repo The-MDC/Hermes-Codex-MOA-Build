@@ -49,7 +49,7 @@ safe-outputs:
 You are auditing **this repository's own Claude Code harness** — its
 hooks, skills, commands, and agents — using the deterministic rubric
 defined in `.claude/commands/harness-audit.md`. This workflow does not
-touch product code; it audits the tooling that MADHATs repos are built
+touch product code; it audits the tooling this repo is built
 with.
 
 ## Steps

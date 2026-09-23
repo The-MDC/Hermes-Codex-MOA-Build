@@ -2,7 +2,7 @@
 name: mcp-server-patterns
 description: "> Build MCP servers with Node/TypeScript SDK — tools, resources, prompts, Zod validation, stdio vs Streamable HTTP transport. Use when building or maintaining MCP servers, adding tools or resources, choosing transport, upgrading the SDK, or debugging MCP registration. Triggers on \"build MCP server\", \"MCP tool\", \"MCP resource\", \"model context protocol\", \"add MCP\", \"MCP integration\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:
@@ -34,12 +34,12 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 
-const server = new McpServer({ name: "mad-gambit-mcp", version: "1.0.0" });
+const server = new McpServer({ name: "example-mcp", version: "1.0.0" });
 
 // Tool registration
 server.tool(
   "get_market_odds",
-  "Get current odds for a MAD Gambit prediction market",
+  "Get current odds for a prediction market",
   {
     marketId: z.string().describe("The market ID"),
   },
@@ -108,7 +108,7 @@ Add to `~/.claude/settings.json` or `.claude/settings.local.json`:
 ```json
 {
   "mcpServers": {
-    "mad-gambit": {
+    "example": {
       "command": "npx",
       "args": ["tsx", "/path/to/server.ts"],
       "env": {

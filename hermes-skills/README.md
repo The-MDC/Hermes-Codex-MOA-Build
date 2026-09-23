@@ -35,7 +35,7 @@ hermes skills list          # confirm they registered
 
 ## What is here
 
-31 skills across 12 categories, each laid out as Hermes expects —
+29 skills across 11 categories, each laid out as Hermes expects —
 `<category>/<name>/SKILL.md` plus any supporting files copied verbatim.
 
 | Category | Skills |
@@ -50,8 +50,14 @@ hermes skills list          # confirm they registered
 | productivity | `doc-coauthoring` · `internal-comms` · `learn` |
 | media | `file-reading` · `pdf-reading` · `pptx` |
 | autonomous-ai-agents | `skill-creator` |
-| madhats | `mad-gambit-ai-agents` · `mad-gambit-context` |
 | **operations** (hand-written) | `local-desktop` · `hermes-orchestration` |
+
+This build carries **no product content**. Four upstream sources name a specific product
+in their code examples — an MCP server name, a SIWE login string, a stack summary, an
+example contract's fee constants — and the port scrubs those on the way through. Deleting
+the generated file would not have worked: the next run writes it straight back. `SCRUB` in
+`scripts/port-skills-to-hermes.js` holds the substitutions, and the port re-reads its own
+output afterwards and fails if any reference survived.
 
 ## Kept up to date
 

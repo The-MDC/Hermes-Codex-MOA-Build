@@ -2,7 +2,7 @@
 name: backend-patterns
 description: "> Backend architecture patterns for Hono, HonoX, Supabase, and Node.js — API design, repository pattern, service layer, caching, error handling, background jobs, logging. Use when designing API endpoints, implementing data access layers, optimizing Supabase queries, adding caching or queuing, or structuring error handling. Triggers on \"API endpoint\", \"Supabase query\", \"service layer\", \"repository\", \"caching\", \"background job\", \"middleware\", \"rate limit\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:
@@ -14,7 +14,7 @@ metadata:
 
 # Backend Patterns
 
-Architecture patterns for the MAD Gambit Hono + Supabase stack.
+Architecture patterns for a Hono + Supabase stack.
 
 ## API Design (Hono)
 

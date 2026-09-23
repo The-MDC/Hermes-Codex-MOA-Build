@@ -2,7 +2,7 @@
 name: security-review
 description: "> Security review for Web3/full-stack applications. Use when adding authentication, handling user input, working with secrets, creating API endpoints, implementing payment or prediction market features, writing smart contracts, or deploying any production code. Covers Supabase RLS, EVM wallet verification, ERC-4337 AA security, smart contract patterns, and standard web security. Always activate before any production deployment or PR review."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:
@@ -119,7 +119,7 @@ async function verifyWalletOwnership(
 
 // NEVER trust an address claim without verifying the signature
 // NEVER skip replay attack protection — include nonce + timestamp in message
-const message = `MAD Gambit login\nNonce: ${nonce}\nTimestamp: ${Date.now()}`
+const message = `Example App login\nNonce: ${nonce}\nTimestamp: ${Date.now()}`
 ```
 
 Checklist:

@@ -182,11 +182,92 @@ const INCLUDE = {
 
   // --- meta -----------------------------------------------------------------
   'skill-creator':        { category: 'autonomous-ai-agents', tags: ['Skills', 'Authoring', 'Evals'] },
-
-  // --- MADHATs project context ---------------------------------------------
-  'mad-gambit-context':   { category: 'madhats', tags: ['MAD-Gambit', 'MADHATs', 'Canonical-Numbers', 'Context'] },
-  'mad-gambit-ai-agents': { category: 'madhats', tags: ['MAD-Gambit', 'AI-Agents', 'Oracles', 'Architecture'] },
 };
+
+/**
+ * Product references scrubbed out of ported content.
+ *
+ * WHY THIS IS NEEDED AT ALL
+ *     This build is the Hermes + Codex + Nemotron orchestration and carries no product
+ *     content. But four of the upstream sources were written against a specific product
+ *     and mention it in their EXAMPLES: an MCP server name, a SIWE login string, a stack
+ *     summary line, and an example contract's fee constants. Deleting the generated files
+ *     does not fix that -- the next port writes them straight back. The scrub has to live
+ *     in the generator or it is not a fix.
+ *
+ * WHY SCRUB RATHER THAN DROP THE SKILLS
+ *     Every one of those references is example content, not the substance. Dropping
+ *     solidity-foundry, mcp-server-patterns, security-review and backend-patterns to
+ *     remove four sample identifiers would cost four real capabilities to solve a naming
+ *     problem. The numbers are replaced with DIFFERENT values on purpose: substituting a
+ *     synonym would leave the figure itself in the tree, which is the thing being removed.
+ *
+ * ORDER MATTERS. Specific patterns run before the generic catch-alls, or the catch-alls
+ * mangle the cases that have a better replacement.
+ *
+ * assertScrubbed() below re-reads everything this script writes and fails the run if any
+ * term survives, so a new upstream mention cannot arrive unnoticed.
+ */
+const SCRUB = [
+  // -- specific: an example gets a better replacement than the catch-all would give
+  [/Smart contract development for MAD Gambit on Base L2/g, 'Smart contract development on Base L2'],
+  [/Architecture patterns for the MAD Gambit Hono \+ Supabase stack/g, 'Architecture patterns for a Hono + Supabase stack'],
+  [/PLATFORM_FEE_BPS = 188;\s*\/\/ 1\.88%/g, 'PLATFORM_FEE_BPS = 250; // 2.5%'],
+  [/COMMUNITY_SHARE_BPS = 2880;\s*\/\/ 28\.8% \(display 28%\)/g, 'COMMUNITY_SHARE_BPS = 1000; // 10%'],
+  [/MAD Gambit prediction market/g, 'prediction market'],
+  [/MAD Gambit login/g, 'Example App login'],
+  [/mad-gambit-mcp/g, 'example-mcp'],
+  // -- generic catch-alls, last
+  [/MADHATs Gambit/g, 'the platform'],
+  [/MAD Gambit/g, 'the platform'],
+  [/MADHATs/g, 'the project'],
+  [/mad-gambit/g, 'example'],
+  [/madhats/g, 'example'],
+];
+
+/** Terms that must not survive into the output tree. Checked after every write. */
+const FORBIDDEN = /madhat|mad[ -]gambit|1\.88%|28\.8%/i;
+
+function scrub(text) {
+  let out = text;
+  for (const [pattern, replacement] of SCRUB) out = out.replace(pattern, replacement);
+  return out;
+}
+
+/**
+ * Re-read the output tree and fail if any forbidden term survived.
+ *
+ * A scrub table is only as good as its coverage, and coverage silently decays: upstream
+ * ships a new example next month, SCRUB does not match it, and the reference is back in
+ * the tree with nobody looking. This reads what was actually written rather than trusting
+ * that the substitution fired, which is the difference between a check and a hope.
+ *
+ * Binary support files (fonts, OOXML schemas) are skipped by extension -- they cannot
+ * carry prose, and decoding 5.6 MB of .ttf as UTF-8 to prove it would be theatre.
+ */
+const TEXTUAL = /\.(md|txt|json|ya?ml|js|ts|tsx|py|sh|sol|toml|csv)$/i;
+
+function assertScrubbed(root) {
+  const hits = [];
+  const walk = (dir) => {
+    let entries = [];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) { walk(full); continue; }
+      if (!TEXTUAL.test(e.name)) continue;
+      let text;
+      try { text = fs.readFileSync(full, 'utf8'); } catch { continue; }
+      text.split('\n').forEach((line, i) => {
+        if (FORBIDDEN.test(line)) {
+          hits.push(`${path.relative(REPO_ROOT, full)}:${i + 1}: ${line.trim().slice(0, 100)}`);
+        }
+      });
+    }
+  };
+  walk(root);
+  return hits;
+}
 
 /** Deliberately not ported, with the reason. Printed in the report so the choice is auditable. */
 const EXCLUDE = {
@@ -281,12 +362,12 @@ function attributionFor(srcPath, front) {
     const owner = external.repo.split('/').slice(-2, -1)[0];
     const pretty = owner.charAt(0).toUpperCase() + owner.slice(1);
     return {
-      author: `${pretty} (${external.repo}) — ported for Hermes Agent by MADHATs`,
+      author: `${pretty} (${external.repo}) — ported for Hermes Agent`,
       license: external.license,
     };
   }
   return {
-    author: 'Anthropic — ported for Hermes Agent by MADHATs',
+    author: 'Anthropic — ported for Hermes Agent',
     license: unquote(front.license) || 'Anthropic skill licence; see upstream',
   };
 }
@@ -541,9 +622,22 @@ function readLock() {
   return parsed;
 }
 
-function writeLock(fresh) {
+function writeLock(fresh, registry) {
   const prev = readLock();
   const merged = Object.assign({}, (prev && prev.skills) || {}, fresh);
+
+  // Merge is for a source this MACHINE cannot see. It is not for a skill that was
+  // REMOVED FROM THE MANIFEST -- carrying one of those forward leaves a record of
+  // something the build no longer has, and the lock stops describing the build.
+  // The two cases look identical in the lock and are told apart by the manifest.
+  const dropped = [];
+  for (const name of Object.keys(merged)) {
+    if (fresh[name]) continue;
+    const declared = registry && registry.get(name);
+    const stillManaged = Boolean(INCLUDE[name]) || (declared && declared.source === 'hand-written');
+    if (!stillManaged) { delete merged[name]; dropped.push(name); }
+  }
+
   const ordered = {};
   for (const k of Object.keys(merged).sort()) ordered[k] = merged[k];
   const doc = {
@@ -554,7 +648,11 @@ function writeLock(fresh) {
   };
   fs.mkdirSync(path.dirname(LOCK_PATH), { recursive: true });
   fs.writeFileSync(LOCK_PATH, JSON.stringify(doc, null, 2) + '\n');
-  return { carried: Object.keys(merged).length - Object.keys(fresh).length, total: Object.keys(merged).length };
+  return {
+    carried: Object.keys(merged).length - Object.keys(fresh).length,
+    total: Object.keys(merged).length,
+    dropped,
+  };
 }
 
 /**
@@ -690,8 +788,10 @@ function main() {
 
     const srcFile = path.join(src, 'SKILL.md');
     const text = fs.readFileSync(srcFile, 'utf8');
-    const { front, body } = splitFrontmatter(text);
-    const description = unquote(front.description) || `${name} skill ported from Claude.`;
+    const { front, body: rawBody } = splitFrontmatter(text);
+    // Scrub BOTH, not just the body: one source names the product in its summary line.
+    const body = scrub(rawBody);
+    const description = scrub(unquote(front.description) || `${name} skill ported from Claude.`);
     const { author, license } = attributionFor(src, front);
     const surfaces = surfacesFor(name, ['hermes']);
 
@@ -768,7 +868,10 @@ function main() {
   }
 
   let lockSummary = null;
-  if (!DRY_RUN) lockSummary = writeLock(lockEntries);
+  if (!DRY_RUN) lockSummary = writeLock(lockEntries, registry);
+
+  // Verify the scrub actually landed, rather than trusting that it fired.
+  const survived = DRY_RUN ? [] : assertScrubbed(OUT_DIR);
 
   // ---------------------------------------------------------------- report
   const byCategory = {};
@@ -782,7 +885,8 @@ function main() {
   console.log(`  claude copies written: ${claudeWritten.length}${claudeWritten.length ? ' — ' + claudeWritten.sort().join(', ') : ''}`);
   if (lockSummary) {
     console.log(`  lockfile: ${path.relative(REPO_ROOT, LOCK_PATH)} — ${lockSummary.total} entries` +
-                (lockSummary.carried ? ` (${lockSummary.carried} carried over from a previous machine)` : ''));
+                (lockSummary.carried ? ` (${lockSummary.carried} carried over from a previous machine)` : '') +
+                (lockSummary.dropped.length ? `, ${lockSummary.dropped.length} dropped: ${lockSummary.dropped.join(', ')}` : ''));
   }
   console.log('');
   for (const [cat, names] of Object.entries(byCategory).sort()) {
@@ -820,6 +924,20 @@ function main() {
   }
   console.log('');
   console.log(`  deliberately excluded: ${Object.keys(EXCLUDE).length} (see EXCLUDE in this file for each reason)`);
+  if (!DRY_RUN) {
+    console.log(`  scrub: ${survived.length === 0 ? 'clean — no product reference survived into the output tree'
+                                                  : survived.length + ' SURVIVED'}`);
+  }
+
+  if (survived.length) {
+    console.error('');
+    console.error('port-skills-to-hermes: product references survived the scrub:');
+    for (const h of survived) console.error(`  ${h}`);
+    console.error('');
+    console.error('Upstream almost certainly added a new mention. Add a pattern to SCRUB and re-run.');
+    console.error('Do not edit the generated file: the next port writes the reference straight back.');
+    process.exitCode = 1;
+  }
 
   // A port that silently produced nothing is worse than one that fails.
   if (ported.length === 0 && claudeWritten.length === 0) {

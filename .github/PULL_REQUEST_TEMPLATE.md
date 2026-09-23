@@ -8,25 +8,22 @@
 
 ## Verification
 
-- [ ] `scripts/madhats-doctor.sh` passes (no FAIL lines)
-- [ ] If a hook or `hooks.json` changed: the referenced script exists and the hook fired in a real session
+- [ ] `scripts/repo-doctor.sh` passes (no FAIL lines)
+- [ ] If a hook changed: the referenced script exists and the hook fired in a real session
 - [ ] If a slash command changed: invoked it once end to end
-- [ ] If `.mcp.json` changed: every server still connects
-- [ ] If a smart contract changed: `/security` run, findings addressed
+- [ ] If `.mcp.json` or `configs/hermes/config.yaml` changed: every server still connects, and the Hermes config assertion block prints `hermes config: OK`
+- [ ] If a skill or MCP server was added or removed: `python3 scripts/check-capabilities.py` passes
+- [ ] If a model id changed: checked against **that gateway's** catalog, not another's
 
-## Canonical numbers
+## No product content
 
-<!-- Tick if untouched. If this PR CHANGES a canonical number, say who approved it —
-     CLAUDE.md requires explicit approval, and the number is restated in several files.
+<!-- This repo is the Hermes + Codex orchestration build and carries no product
+     content. Four upstream skill sources mention a product in their code examples;
+     SCRUB in scripts/port-skills-to-hermes.js removes those on the way through, and
+     the port fails if any survives. If you added a skill, run the port and check the
+     `scrub: clean` line rather than assuming. -->
 
-     READ THIS ONE PROPERLY. CI no longer checks it. The automated comparison against
-     every restatement in the repo was removed, so a drifted copy — "1.8%" where the
-     canonical figure is "1.88%" — will now reach main unless a human catches it here.
-     Both read as equally plausible. CLAUDE.md is the only source of truth; check the
-     restatement against it, not against memory. -->
-
-- [ ] No canonical number changed (fee 1.88%, community 28.8%, creator 40%, pre-money $12M)
-- [ ] A canonical number changed — approved by: ______ , and CLAUDE.md updated first
+- [ ] No product name, branding or figure was introduced
 
 ## Numbers, if this is a performance or cost change
 

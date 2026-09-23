@@ -15,7 +15,7 @@ Ten of the fifteen scripts it referenced did not exist. The behaviour it describ
 was specified in two places — that file and `.claude/rules/typescript-hooks.md` —
 and implemented in neither.
 
-The file has been removed. `scripts/madhats-doctor.sh` now validates
+The file has been removed. `scripts/repo-doctor.sh` now validates
 `.claude/settings.json` instead, and warns if `hooks.json` ever reappears.
 
 ## What runs now
@@ -74,5 +74,5 @@ pass is not a gate:
 - `pre-bash-guard.js` — 4/4 bypass forms denied, 5/5 ordinary commands allowed.
 - `stop-audit.js` — proven non-vacuous by planting a `console.log` in a changed
   file (detected, correct line), then removing it (silent again).
-- `madhats-doctor.sh` — exits **1** when a wired hook points at a missing script,
+- `repo-doctor.sh` — exits **1** when a wired hook points at a missing script,
   exits **0** on the current tree, and warns if `hooks.json` returns.

@@ -2,7 +2,7 @@
 name: frontend-design
 description: "Guidance for distinctive, intentional visual design when building new UI or reshaping an existing one. Helps with aesthetic direction, typography, and making choices that don't read as templated defaults."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Complete terms in LICENSE.txt"
 platforms: [linux, macos, windows]
 metadata:

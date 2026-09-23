@@ -70,7 +70,7 @@ Hand off when the task is:
 
 - **Bounded and git-repo-scoped** — implement, fix, or refactor something inside a
   checked-out repository, not "reason about a business decision" or "write investor
-  copy." Codex has no context on MAD Gambit's canon, voice, or `CLAUDE.md` — that
+  copy." Codex has no context on this repo's conventions or `CLAUDE.md` — that
   context lives in Hermes' system prompt and this repo, and shelling out to Codex
   does not carry it along.
 - **Iterate-and-verify shaped** — needs edits, a test run, more edits, not a single
