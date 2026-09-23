@@ -2,7 +2,7 @@
 name: vercel-for-github
 description: "Operate the Vercel-GitHub integration and build Vercel CI/CD on GitHub Actions. Covers native Git deploys (production and preview branches, fork protection, PR comments), the GitHub App permission model, vercel.json git config, vercel pull/build/deploy --prebuilt workflows, repository_dispatch events, migrating off deployment_status, E2E tests against protected previews, Deployment Checks gating, Turborepo pipelines, and system environment variables. Use when wiring a repo to Vercel, when a push produced no deployment, after a repo rename breaks the webhook, when builds must run in Actions (GitHub Enterprise Server, tests, security scans, approval gates), when preview URLs 401 in CI, or when choosing between the native integration and a custom pipeline. Triggers on \"Vercel for GitHub\", \"GitHub Actions Vercel\", \"vercel deploy --prebuilt\", \"repository_dispatch\", \"vercel.deployment.success\", \"git.deploymentEnabled\", \"VERCEL_TOKEN\", \"GHES\", \"why didn't my push deploy\", \"repo not showing in Vercel\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

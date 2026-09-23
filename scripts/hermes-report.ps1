@@ -226,7 +226,7 @@ if (-not (Have 'ollama')) {
     Say '  ollama NOT ON PATH - the local floor and 5 auxiliary slots have no backend'
 } else {
     $tags = (& ollama list 2>&1 | Out-String)
-    foreach ($m in @('hermes3:8b', 'nemotron-nano:12b-v2')) {
+    foreach ($m in @('hermes3:8b')) {
         Say ("  {0,-24} {1}" -f $m, $(if ($tags -match [regex]::Escape($m)) { 'PRESENT' } else { 'ABSENT' }))
     }
     Say '  full list:'

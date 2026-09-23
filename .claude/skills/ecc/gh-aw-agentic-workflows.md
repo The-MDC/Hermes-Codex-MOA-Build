@@ -1,6 +1,6 @@
 ---
 name: gh-aw-agentic-workflows
-description: How MADHATs uses GitHub Agentic Workflows (gh-aw) to run Claude Code as PR/issue automation instead of only interactively
+description: How to use GitHub Agentic Workflows (gh-aw) to run Claude Code as PR/issue automation instead of only interactively
 ---
 
 # GitHub Agentic Workflows (gh-aw)
@@ -25,7 +25,7 @@ PR/issue events, across repos, without a human invoking Claude each time.
 
 | Repo | Workflow | Trigger | Maps to |
 |---|---|---|---|
-| `MADHATs-Claude-Enhancement` (this repo) | `agentic-harness-audit.md` | PR touching `.claude/**`, weekly schedule, manual dispatch | `/harness-audit` |
+| this repo | `agentic-harness-audit.md` | PR touching `.claude/**`, weekly schedule, manual dispatch | `/harness-audit` |
 | `MAD-MPP-2.23` | `agentic-security-review.md` | PR touching `app/**`, `backend-node/**`, `contracts/**` | `/security` |
 | `MAD-MPP-2.23` | `agentic-quality-review.md` | PR touching `app/**`, `backend-node/**` | `/quality-gate` (qualitative half — lint/type-check stay in `ci.yml`) |
 

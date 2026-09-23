@@ -2,7 +2,7 @@
 name: api-design
 description: "> REST API design patterns — resource naming, HTTP methods, status codes, pagination, filtering, error response format, versioning, and rate limiting for production APIs. Use when designing new API endpoints, reviewing existing contracts, planning versioning, adding pagination or filtering, or building public/partner-facing APIs. Triggers on \"design API\", \"API endpoint\", \"REST\", \"pagination\", \"API versioning\", \"error format\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

@@ -2,7 +2,7 @@
 name: verification-loop
 description: "> Comprehensive verification system for code sessions. Use after completing a feature, before creating a PR, after refactoring, or any time you want to confirm quality gates pass. Runs build, type check, lint, tests, security scan, and diff review in sequence. Always activate before any production deployment or merge."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

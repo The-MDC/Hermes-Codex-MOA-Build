@@ -2,7 +2,7 @@
 name: investor-materials
 description: "> Create and update pitch decks, one-pagers, investor memos, accelerator applications, financial models, and fundraising materials. Use when user needs investor-facing documents, projections, use-of-funds tables, milestone plans, or materials that must stay internally consistent across multiple fundraising assets. Triggers on \"pitch deck\", \"one-pager\", \"investor memo\", \"financial model\", \"use of funds\", \"fundraising\", \"accelerator application\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

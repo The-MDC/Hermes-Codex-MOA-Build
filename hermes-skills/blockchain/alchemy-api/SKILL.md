@@ -2,7 +2,7 @@
 name: alchemy-api
 description: "> Integrates Alchemy blockchain APIs using an API key for EVM JSON-RPC calls, token balances, NFT ownership/metadata, transfer history, token prices, portfolio data, transaction simulation, webhooks, and Solana RPC. Use when querying blockchain data, checking balances, looking up NFTs, fetching prices, or building any Alchemy product integration. Requires $ALCHEMY_API_KEY. If key unavailable, use agentic-gateway skill instead. Covers Base L2 (primary), Arbitrum, Ethereum mainnet, and Solana."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "MIT"
 platforms: [linux, macos, windows]
 metadata:

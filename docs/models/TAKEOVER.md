@@ -13,8 +13,8 @@ the local runner, and every earlier version of this table left that unsaid.
 
 | Actor | Available | Does | Does not |
 |---|---|---|---|
-| **A human, or Claude** | from the start | Phases 0 through step 1.7, before any local model exists. Installs Ollama, pulls the models, stands up `llama-server`. | Skip step 1.6 or 1.7 because "the models are there". |
-| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.7 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
+| **A human, or Claude** | from the start | Phases 0 through step 1.3, before any local model exists. Installs Ollama, pulls `hermes3:8b`, installs llama.cpp, stands up `llama-server`. | Skip step 1.4 because "the model is there". |
+| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.3 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
 | **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
 
 **Why a vision model runs this runbook.** The loop below is "compare the output to
@@ -25,21 +25,21 @@ the Cloudflare and Render dashboard pages — a text-only runner sees none of it
 because none of it arrives on stdout. Several success lines in this file describe
 exactly those things. Hand the VL model a screenshot and it can check them.
 
-**It reads and reports; it does not execute — until step 1.8 says otherwise.** This
+**It reads and reports; it does not execute — until step 1.4 says otherwise.** This
 model was imported from a bare GGUF with no `TEMPLATE` directive, so its tool-calling
 convention is unverified, and a wrong template degrades tool use while ordinary chat
 looks perfect. Commands stay in the shell a human or the harness drives.
 
-**Step 1.8 is the gate that lifts this.** It runs two probes against :8080 — one that
+**Step 1.4 is the gate that lifts this.** It runs two probes against :8080 — one that
 the model genuinely sees an image, one that it emits real `tool_calls` — and its
 outcome table says which of the three roles this runner may actually hold. Do not
 promote it to driving execution on the strength of ordinary chat looking fine; that
-is exactly what a wrong template hides. (`VSCODE-QUICKSTART.md` §2.6 is the equivalent
-probe for the two **Ollama** models on :11434; it does not cover this one.)
+is exactly what a wrong template hides. (The quickstart covers Ollama's `hermes3:8b` on :11434 only; it does
+not probe this model at all.)
 
 **The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
-`llama-server` on `127.0.0.1:8080`, and step 1.7 is what starts it. Before that it
-has no backend, so it cannot be the thing checking step 1.7's own success line.
+`llama-server` on `127.0.0.1:8080`, and step 1.3 is what starts it. Before that it
+has no backend, so it cannot be the thing checking step 1.3's own success line.
 The same was quietly true of the model this table used to name — imported at step
 1.4 — which is how a runbook ends up implying a model runs the steps that create it.
 
@@ -83,8 +83,9 @@ Save the output. You will compare against it at step 6.1.
 
 ## Phase 1 — local models
 
-The local tier backs the floor plus five auxiliary slots. Nothing else works
-predictably until Ollama holds both models.
+The local tier backs the floor plus five auxiliary slots, and the VL runner backs
+vision plus all heavy local text. Nothing else works predictably until Ollama holds
+`hermes3:8b` and `llama-server` is answering on :8080.
 
 ### Step 1.1 — Confirm Ollama is serving
 
@@ -103,109 +104,28 @@ ollama pull hermes3:8b
 
 **Success:** `ollama list` now shows `hermes3:8b`.
 
-### Step 1.3 — Import the Nemotron floor
+### Step 1.3 — Local vision AND heavy local text: llama.cpp, NOT Ollama
 
-Download the Q5_K_M only. **Not** `bartowski/nvidia_Llama-3.1-Nemotron-Nano-8B-v1-GGUF`
-— that is a March 2025 Llama-3.1 model, three Nemotron generations old, and not
-what this config names.
+**Use llama.cpp, not Ollama.** A VL GGUF ships as two files — the language model and
+a separate `mmproj` projector — and importing both through an Ollama Modelfile has a
+documented history of failing **silently**.
 
-The `--include` filter matters: the repo holds every quant, and without it you
-pull tens of GB you will not use.
+In [ollama#9967](https://github.com/ollama/ollama/issues/9967) (Gemma3, Mar 2025,
+closed) the projector is named with a second `FROM`, `ollama show` **displays it**, and
+image input still errors `this model is missing data required for image input`. That is
+the failure mode that matters: create succeeds, vision is gone — the same silent
+capability loss `vision: auto` already caused once in this build.
 
-```powershell
-hf download bartowski/nvidia_NVIDIA-Nemotron-Nano-12B-v2-GGUF `
-  --include '*Q5_K_M*.gguf' `
-  --local-dir "$HOME\Models\nemotron-nano-12b-v2" `
-  --max-workers 4
-```
+**Stated at its real strength, because the citations are narrower than "cannot".**
+[ollama#14730](https://github.com/ollama/ollama/issues/14730) is `qwen35moe`, closed as
+a duplicate and root-caused to that architecture's clip runner; there both two `FROM`
+lines and `ADAPTER` failed. Neither issue proves Ollama can *never* do this, and neither
+says anything about `nemotron_v2_vl`. What they establish is a real risk of silent
+capability loss on exactly this path.
 
-**Success:** exactly one `.gguf` of about **8.76 GB** exists under that directory.
-
-```powershell
-Get-ChildItem "$HOME\Models\nemotron-nano-12b-v2" -Filter *.gguf |
-  Select-Object Name, @{n='GB';e={[math]::Round($_.Length/1GB,2)}}
-```
-
-If the machine has under 16 GB of RAM, stop and escalate rather than continuing:
-`NVIDIA-Nemotron-Nano-9B-v2` at Q5 (~6.5 GB) is the substitution, and swapping it
-means editing `config.yaml` in the repo, which is a Sonnet action.
-
-**ESCALATE** if the directory is empty after the command returns. The previous
-attempt at this step, with the older model, failed exactly this way: the command
-returned, the file never appeared.
-
-### Step 1.4 — Register it with Ollama
-
-Write a `Modelfile` next to the GGUF, substituting the actual filename:
-
-```
-FROM ./<the-file>.gguf
-```
-
-Then:
-
-```powershell
-cd "$HOME\Models\nemotron-nano-12b-v2"
-ollama create nemotron-nano:12b-v2 -f .\Modelfile
-```
-
-**Success:** `ollama list` shows `nemotron-nano:12b-v2`. The tag must match exactly —
-`config.yaml` names this string, and a mismatch resolves to nothing.
-
-### Step 1.5 — Prove generation
-
-```powershell
-ollama run nemotron-nano:12b-v2 "Reply with exactly: ready"
-```
-
-**Success:** the reply contains `ready`.
-
-### Step 1.6 — Prove TOOL CALLING
-
-Do not skip this. It is the step that catches a wrong chat template, and a wrong
-template degrades tool use silently while ordinary chat looks fine.
-
-```powershell
-$body = @{
-  model = 'nemotron-nano:12b-v2'
-  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
-  tools = @(@{
-    type = 'function'
-    function = @{
-      name = 'get_weather'
-      description = 'Get current weather for a city'
-      parameters = @{
-        type = 'object'
-        properties = @{ city = @{ type='string' } }
-        required = @('city')
-      }
-    }
-  })
-} | ConvertTo-Json -Depth 10
-
-(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:11434/v1/chat/completions' `
-  -ContentType 'application/json' -Body $body).choices[0].message |
-  ConvertTo-Json -Depth 10
-```
-
-**Success:** the response contains a `tool_calls` array naming `get_weather`.
-**Failure looks like:** prose describing the weather, or prose describing the tool
-it would call. Both mean the template is wrong.
-
-**ESCALATE** on failure. The fix is a `TEMPLATE` directive in the Modelfile, and
-choosing it is a judgment call.
-
-### Step 1.7 — Local vision: llama.cpp, NOT Ollama
-
-**Do not try to do this with Ollama.** A VL GGUF ships as two files — the language
-model and a separate `mmproj` projector — and Ollama's Modelfile cannot attach the
-second one. Two `FROM` lines error, `ADAPTER` does not work
-([ollama#14730](https://github.com/ollama/ollama/issues/14730),
-[ollama#9967](https://github.com/ollama/ollama/issues/9967)).
-
-The failure mode is why this warning is here: **`ollama create` succeeds**, silently
-dropping the projector. You get a model with `-VL` in its name that cannot see —
-the same silent capability loss that `vision: auto` already caused once.
+llama.cpp is chosen because it is **positively verified** rather than merely
+not-disproven: `llama-server` takes `--mmproj`, and `nemotron_v2_vl` support is in
+llama.cpp PR #19547 by name.
 
 Download both files (≈10.5 GB total):
 
@@ -219,21 +139,85 @@ hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
 `...VL-BF16-mmproj.gguf` at about **1.69 GB**. The projector is not quantized and
 there is only one; if you have only the first file, vision will not work.
 
-Then serve both. Requires **llama.cpp b6315 or later** — that is where `nemotron_h`,
-this model's hybrid Mamba-Transformer architecture, became supported. An older build
-refuses to load rather than degrading, which is the good failure.
+#### Get llama.cpp
+
+**Take a build from mid-2026 or later.** Current nightlies are around **b11118**
+(checked 2026-09-23) and carry everything needed.
+
+> **This floor was wrong until 2026-09-23.** It read "b6315 or later, that is where
+> `nemotron_h` became supported". True — of a different model. `nemotronh` is the
+> **text** Nemotron Nano v2's hybrid mamba2/attention arch, llama.cpp PR **#15507**,
+> merged 2025-08-29, which is what b6315 dates to. It was researched when the text
+> model held this slot and carried over unchanged when the slot became the VL model.
+>
+> This model is **`nemotron_v2_vl`**, and it needs two PRs:
+>
+> | PR | What | Merged |
+> |---|---|---|
+> | **#19547** | Add Nemotron Nano 12B v2 VL support | 2026-02-12 |
+> | **#23638** | `mtmd`: dynamic hi-res tiling for `nemotron_v2_vl` | ~2026-05-25 |
+>
+> **#23638 is not optional here.** Without it the projector encodes every image at a
+> fixed 256 tokens regardless of resolution, and `--image-min-tokens` /
+> `--image-max-tokens` are silently ignored (issue **#25317**, which calls the result
+> "effectively unusable" for document images). This tier exists to read installer
+> dialogs and terminal output from screenshots. A build missing #19547 refuses to
+> load — the good failure. One missing #23638 loads, sees, and reads them badly.
+
+Releases are at <https://github.com/ggml-org/llama.cpp/releases>. Take a `b#####` tag,
+**not** a `v0.4.x` one — the `v` releases carry no Windows binaries. Pick one zip:
+
+| Asset | When |
+|---|---|
+| `llama-b#####-bin-win-cuda-12.4-x64.zip` | NVIDIA GPU, driver for CUDA 12.x |
+| `llama-b#####-bin-win-cuda-13.4-x64.zip` | NVIDIA GPU, newer driver |
+| `llama-b#####-bin-win-cpu-x64.zip` | no NVIDIA GPU, or unsure |
+| `llama-b#####-bin-win-cpu-arm64.zip` | Snapdragon X / ARM laptop |
+
+**A CUDA build also needs its runtime.** Download the matching
+`cudart-llama-bin-win-cuda-<same-version>-x64.zip` and unzip it **into the same
+folder**. Without it `llama-server.exe` exits immediately on a missing DLL, and the
+error does not mention CUDA.
+
+```powershell
+$dest = "$HOME\llama.cpp"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+# unzip BOTH archives into $dest, then:
+$env:PATH = "$dest;$env:PATH"
+llama-server --version
+```
+
+**Success:** a version line carrying a `b#####` number ≥ 6315.
+
+#### Serve it
 
 ```powershell
 $m = "$HOME\Models\nemotron-nano-12b-v2-vl"
 llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
              --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
              --alias nemotron-nano-12b-v2-vl `
-             --host 127.0.0.1 --port 8080
+             --host 127.0.0.1 --port 8080 `
+             -c 16384 -ngl 99 --jinja
 ```
 
-**`--alias` is load-bearing.** Without it llama-server names the model after its
-file path, `config.yaml`'s `local-vl.default_model` stops matching, and
-`hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+Four of those decide whether this works on a laptop:
+
+- **`--alias` is load-bearing.** Without it llama-server names the model after its
+  file path, `config.yaml`'s `local-vl.default_model` stops matching, and
+  `hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
+- **`-c 16384`** matches `local-vl.context_length` in `config.yaml`. Leave it off and
+  llama-server allocates the model's native window; the KV cache, not the weights, is
+  what exhausts a 16 GB laptop. Raise both numbers together or neither.
+- **`-ngl 99`** offloads every layer it can to the GPU. A CPU-only build ignores it,
+  so it is safe to leave in. Lower it toward `-ngl 20` if VRAM is the limit — the
+  model still runs, just slower.
+- **`--jinja`** uses the model's own chat template. Step 1.4's tool-call probe fails
+  without it, and it fails as *prose about calling a tool* rather than as an error.
+
+**`--host 127.0.0.1` is deliberate.** The server takes no key — `local-vl.api_key` is
+the literal placeholder `"no-key-required"` — so binding `0.0.0.0` would put an
+unauthenticated model endpoint on the local network. If it genuinely has to leave the
+box, put a reverse proxy in front and add auth there.
 
 **Success:**
 
@@ -243,15 +227,32 @@ file path, `config.yaml`'s `local-vl.default_model` stops matching, and
 
 prints exactly `nemotron-nano-12b-v2-vl`.
 
-Leave it running. The `vision` auxiliary slot routes here, so a stopped server is a
-missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason.
+#### Keep it running
+
+The `vision` slot and all heavy local text route here, so a stopped server is a
+missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason. A
+terminal window someone can close is not a deployment. Pick one:
+
+1. **Windows service via NSSM** — survives logout and reboot, restarts on crash.
+   `nssm install llama-vl "$HOME\llama.cpp\llama-server.exe"`, set the arguments and
+   startup directory, then `nssm start llama-vl`. Use this before relying on the tier,
+   and definitely before handing the machine off.
+2. **Scheduled Task at log on** — `schtasks /create /tn llama-vl /sc onlogon /rl
+   highest /tr "...\llama-server.exe <args>"`. No extra software; does not survive a
+   logged-out reboot.
+3. **A pinned terminal** — what the bare command above gives you. Fine while bringing
+   the stack up, wrong for anything after.
+4. **Docker** with `--restart unless-stopped`. Clean lifecycle, but GPU passthrough on
+   Windows adds a layer and the model files have to be mounted in.
+
+Start at 3 to prove it works, then move to 1.
 
 **If you would rather not run a second local service,** revert `vision` in
 `config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`. That model
 is natively multimodal and is what fixed the slot originally. One line, no loss
 except offline capability.
 
-### Step 1.8 — Prove the VL model SEES and CALLS TOOLS
+### Step 1.4 — Prove the VL model SEES and CALLS TOOLS
 
 Two probes, and they answer two different questions. Run both.
 
@@ -446,7 +447,7 @@ affect the current one.
 `hermes-skills/` holds 31 skills: 29 Claude skills converted to Hermes format, plus
 two written by hand for this build. They are what let this install carry work on its
 own rather than being a bare model router — research, security audit, investor
-material, the MAD Gambit context. Copying them is a separate step from
+material, local desktop operation. Copying them is a separate step from
 `hermes-apply.ps1`, which installs two config files and nothing else.
 
 ```powershell
@@ -458,15 +459,17 @@ hermes skills list
 
 **Success:** `hermes skills list` shows 31 skills across 12 categories — the eleven
 ported ones (`blockchain`, `software-development`, `security`, `research`, `finance`,
-`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`, `madhats`)
-plus **`operations`**.
+`creative`, `devops`, `productivity`, `media`, `autonomous-ai-agents`) plus
+**`operations`**.
 
-**`operations` is the one that matters for handing this build over.** The port
-deliberately drops Claude-surface skills, which was correct — they describe tools
-Hermes does not have — but nothing replaced them, leaving the agent with no skill
-that taught it to use `terminal`, `process` or `execute_code`, its actual local
-capabilities. `operations/local-desktop` covers those; `operations/hermes-orchestration`
-covers maintaining this routing build. Both are hand-written and have no upstream.
+**`operations` is the one that matters for handing this build over.**
+`operations/local-desktop` teaches `terminal`, `process` and `execute_code` as this
+machine's capability surface; `operations/hermes-orchestration` covers *this* routing
+build — the five tiers, the gateway ids, the scripts. Both are hand-written.
+
+They are deliberately narrow, and step 3.4a installs the upstream skills that cover
+the general case: upstream's `autonomous-ai-agents/hermes-agent` documents Hermes
+itself better than ours does, and ours should not restate it.
 
 Editing rule, and it differs by origin: the **ported** skills are regenerated by
 `scripts/port-skills-to-hermes.js`, so hand-edits there are lost on the next run.
@@ -490,6 +493,49 @@ Both `operations/` skills are also declared for the **Claude surface** in
 `capabilities.yaml` and generated into `.claude/skills/operations/`. That matters for a
 handoff: it is what lets the model *instructing* this build see the same two skills the
 local tier is being handed, instead of only Hermes seeing them.
+
+### Step 3.4a — Enable the three upstream skills this build relies on
+
+Hermes ships 24 categories of **optional** skills in its own tree, disabled by
+default. Three of them back capabilities this config already turns on, and without
+them those capabilities exist only on paper:
+
+| Skill | Why this build needs it |
+|---|---|
+| `research/searxng-search` | `web.search_backend` is `searxng`. The backend is configured and the container documented; nothing taught the agent to use it. |
+| `mcp/mcporter` | List, auth and call MCP servers from the terminal. This build runs 8 MCP servers and has lost time to three separate **silent** MCP failures. It is the only tool here that can diagnose them. |
+| `software-development/subagent-driven-development` | `delegation` routes subagents to `custom:nvidia-nim` and `moa` aggregates through it. Both configured, neither taught. |
+
+```powershell
+# These live in the Hermes SOURCE tree. A one-line installer leaves none on disk,
+# so find it rather than assuming a path.
+$opt = @(
+  "$HOME\.hermes\optional-skills",
+  "$HOME\hermes-agent\optional-skills",
+  "$env:LOCALAPPDATA\hermes\optional-skills"
+) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $opt) {
+  git clone --depth 1 https://github.com/NousResearch/hermes-agent "$HOME\hermes-agent-src"
+  $opt = "$HOME\hermes-agent-src\optional-skills"
+}
+Write-Host "optional-skills: $opt"
+
+$dest = Join-Path $HOME ".hermes\skills"
+New-Item -ItemType Directory -Path $dest -Force | Out-Null
+Copy-Item (Join-Path $opt "research\searxng-search")                          $dest -Recurse -Force
+Copy-Item (Join-Path $opt "mcp\mcporter")                                     $dest -Recurse -Force
+Copy-Item (Join-Path $opt "software-development\subagent-driven-development")  $dest -Recurse -Force
+hermes skills list
+```
+
+**Success:** all three appear in `hermes skills list`. `hermes-verify.ps1` warns for
+each one that does not, from stage `b` onward.
+
+**Do not port a Claude equivalent for these.** They are already in Hermes format.
+`scripts/port-skills-to-hermes.js` exists to convert skills Hermes does *not* ship —
+porting over something upstream already has is how `pptx` came to carry 1.3 MB of
+duplicate OOXML schemas before it was caught.
 
 ### Step 3.5 — Restart the gateway
 

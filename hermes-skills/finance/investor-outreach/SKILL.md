@@ -2,7 +2,7 @@
 name: investor-outreach
 description: "> Draft cold emails, warm intro blurbs, follow-ups, update emails, and investor communications for fundraising. Use when user wants outreach to angels, VCs, strategic investors, or accelerators and needs concise, personalized, investor-facing messaging. Triggers on \"cold email\", \"warm intro\", \"investor outreach\", \"follow-up\", \"investor update\", \"reach out to VCs\", \"fundraising email\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

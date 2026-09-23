@@ -2,7 +2,7 @@
 name: algorithmic-art
 description: "algorithmic-art skill ported from Claude."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Complete terms in LICENSE.txt"
 platforms: [linux, macos, windows]
 metadata:

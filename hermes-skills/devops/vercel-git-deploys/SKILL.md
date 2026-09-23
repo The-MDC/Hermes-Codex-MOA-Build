@@ -2,7 +2,7 @@
 name: vercel-git-deploys
 description: "Diagnose and operate Vercel deployments driven by Git (GitHub, GitLab, Bitbucket) — why a push didn't deploy, why a build is red, why a page 401s, how to promote or roll back, how to run builds in GitHub Actions, and how deployment protection interacts with custom domains. Use when a deploy is stuck, missing, reverted, erroring, or gated behind an unexpected login, when wiring a repo to Vercel, when a repo won't appear in the import list, when configuring vercel.json git options, Ignored Build Step, deploy hooks, or monorepo build skipping, and when a fix that went live silently disappears later. Triggers on \"Vercel\", \"vercel.json\", \"deploy hook\", \"preview deployment\", \"production branch\", \"promote to production\", \"instant rollback\", \"Ignored Build Step\", \"deployment protection\", \"why didn't my push deploy\", \"Vercel build failed\", \"vercel deploy --prebuilt\", \"VERCEL_ENV\", \"repo not showing in Vercel\"."
 version: 1.0.0
-author: "Anthropic — ported for Hermes Agent by MADHATs"
+author: "Anthropic — ported for Hermes Agent"
 license: "Anthropic skill licence; see upstream"
 platforms: [linux, macos, windows]
 metadata:

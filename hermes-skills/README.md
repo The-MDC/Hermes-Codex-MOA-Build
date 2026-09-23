@@ -19,10 +19,19 @@ assumed. Edit these directly; there is nowhere else to edit them.
 The port deliberately excludes Claude-surface skills — `chrome-browser`,
 `built-in-browser`, `docs` — because they describe tools Hermes does not have, and a
 ported one would instruct the agent to call something that is not there. That
-reasoning is right, but nothing replaced them, which left this build with 29 skills
-and **none** that taught it to use `terminal`, `process` or `execute_code`: its actual
-local capabilities. `operations/local-desktop` closes that. `operations/hermes-orchestration`
-covers maintaining the routing build itself, which no upstream skill knows about.
+reasoning is right, and nothing ported replaced them.
+
+**Scoped honestly, after checking upstream 2026-09-23.** Hermes does ship adjacent
+skills, and the earlier wording here claimed more ground than it held:
+
+- `autonomous-ai-agents/computer-use` drives the desktop, and many bundled skills use
+  `terminal` and `execute_code` in passing. What none of them do is *teach* those three
+  tools as this machine's own capability surface. `operations/local-desktop` does that.
+- `autonomous-ai-agents/hermes-agent` v3.2.0 covers using, configuring and extending
+  **Hermes in general** — and covers it better than we would.
+  `operations/hermes-orchestration` is narrower on purpose: *these* five tiers, *these*
+  gateway ids, *these* scripts. Read upstream's for how Hermes works; read ours for how
+  this build is wired. If ours starts restating the general case, delete that part.
 
 ## Install
 
@@ -35,7 +44,7 @@ hermes skills list          # confirm they registered
 
 ## What is here
 
-31 skills across 12 categories, each laid out as Hermes expects —
+28 skills across 11 categories, each laid out as Hermes expects —
 `<category>/<name>/SKILL.md` plus any supporting files copied verbatim.
 
 | Category | Skills |
@@ -48,10 +57,16 @@ hermes skills list          # confirm they registered
 | creative | `algorithmic-art` · `brand-guidelines` · `canvas-design` |
 | devops | `vercel-for-github` · `vercel-git-deploys` |
 | productivity | `doc-coauthoring` · `internal-comms` · `learn` |
-| media | `file-reading` · `pdf-reading` · `pptx` |
+| media | `file-reading` · `pdf-reading` |
 | autonomous-ai-agents | `skill-creator` |
-| madhats | `mad-gambit-ai-agents` · `mad-gambit-context` |
 | **operations** (hand-written) | `local-desktop` · `hermes-orchestration` |
+
+This build carries **no product content**. Four upstream sources name a specific product
+in their code examples — an MCP server name, a SIWE login string, a stack summary, an
+example contract's fee constants — and the port scrubs those on the way through. Deleting
+the generated file would not have worked: the next run writes it straight back. `SCRUB` in
+`scripts/port-skills-to-hermes.js` holds the substitutions, and the port re-reads its own
+output afterwards and fails if any reference survived.
 
 ## Kept up to date
 
@@ -116,8 +131,13 @@ the reason for each. Three kinds do not belong:
 
 Closed: Hermes' `security` domain had reconnaissance and tooling (`web-pentest`,
 `oss-forensics`, `sherlock`) but no systematic source-level code audit. `security-audit`
-fills that. Hermes shipped `docx`, `pdf` and `xlsx` but not `pptx`. Hermes' `blockchain`
-domain had only `evm`, `hyperliquid` and `solana`.
+fills that. Hermes' `blockchain` domain had only `evm`, `hyperliquid` and `solana`.
+
+**A gap that turned out not to be one.** `pptx` was ported here on the stated grounds
+that Hermes lacked it. Upstream ships `skills/productivity/powerpoint` — checked
+2026-09-23 — so the port was carrying a duplicate at 1.3 MB of OOXML schemas. Dropped.
+Every "Hermes does not have X" is a claim about a moving upstream; re-read the bundled
+`skills/` tree before trusting one.
 
 Still open: **benchmarking**. Nothing in Hermes' catalog covers performance benchmarking
 methodology, and nothing in the readable Claude skill set does either, so there was
@@ -130,18 +150,19 @@ Already covered by Hermes, so nothing was ported: code checking and debugging
 
 ## Weight
 
-This tree is **8.2 MB**, and two skills are 6.9 MB of it:
+This tree is **7.0 MB**, and **one** skill is 5.6 MB of it:
 
 | Skill | Size | What the bulk is |
 |---|---|---|
 | `creative/canvas-design` | 5.6 MB | 54 `.ttf` font files |
-| `media/pptx` | 1.3 MB | 39 OOXML `.xsd` schemas |
 
-Both sets of assets are genuinely required — `canvas-design` renders with those exact
-fonts, and `pptx` validates against those exact schemas — so they are copied verbatim
-rather than stubbed. But if you would rather not carry binaries in this repo, drop those
-two entries from `INCLUDE` in `scripts/port-skills-to-hermes.js` and re-run; the
-remaining 27 skills total about 1.3 MB of text.
+Those fonts are genuinely required — `canvas-design` renders with those exact faces —
+so they are copied verbatim rather than stubbed. Drop that one entry from `INCLUDE` in
+`scripts/port-skills-to-hermes.js` and re-run if you would rather not carry binaries
+here; everything else totals about **1.5 MB** of text.
+
+It was 8.2 MB until `media/pptx` went — 1.3 MB of OOXML schemas duplicating a skill
+upstream already ships.
 
 ## Attribution
 

@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# madhats-doctor, check whether this machine and this checkout can actually do the work.
+# repo-doctor, check whether this machine and this checkout can actually do the work.
 #
 # WHY THIS EXISTS
-#     Answers three questions before you spend an hour finding out the hard way:
+#     Answers two questions before you spend an hour finding out the hard way:
 #       1. Is the toolchain present, and is the Claude Code harness actually wired?
 #       2. Can this environment reach the hosts our tooling needs?
-#       3. Do the canonical numbers still agree across every file that states them?
 #
 #     The failure mode this is built for is the invisible one. A hook that points at a
 #     path which does not exist does not crash — it silently never runs, and the session
@@ -16,7 +15,7 @@
 #
 # Portable across macOS and Linux: no /proc, no GNU-only stat/df flags.
 #
-# usage: scripts/madhats-doctor.sh [--quiet]
+# usage: scripts/repo-doctor.sh [--quiet]
 
 set -u
 
@@ -36,7 +35,7 @@ warn() { printf '  %swarn%s  %s\n' "$YLW" "$RST" "$*"; WARNED=$((WARNED+1)); }
 bad()  { printf '  %sFAIL%s  %s\n' "$RED" "$RST" "$*"; FAILED=$((FAILED+1)); }
 hdr()  { [ "$QUIET" = 1 ] || printf '\n%s%s%s\n' "$DIM" "$*" "$RST"; }
 
-printf 'MADHATs Gambit, environment check\n'
+printf 'Hermes-Codex build, environment check\n'
 
 # ---------------------------------------------------------------- toolchain --
 hdr "toolchain"
@@ -174,12 +173,11 @@ probe "https://github.com" "github.com"
 probe "https://registry.npmjs.org" "npm registry"
 probe "https://api.anthropic.com" "anthropic api"
 
-# The canonical-numbers group was removed with the owner's explicit approval,
-# together with scripts/check-canonical-numbers.js and the two CI steps that ran it.
-# Removing the script alone would NOT have been enough: the `else` branch here
-# warned when the file was absent, so a delete-only change would have made the
-# doctor complain about its own missing dependency on every run, forever.
-# The numbers remain canonical; CLAUDE.md remains their declaration.
+# A third group used to live here, checking product figures across the tree. It went
+# when the product content did: this repo is the Hermes + Codex orchestration build
+# and states no such figures. Removing the script alone would NOT have been enough —
+# the `else` branch here warned when the file was ABSENT, so a delete-only change
+# would have made the doctor complain about its own missing dependency forever.
 
 # ------------------------------------------------------------------ verdict --
 printf '\n'

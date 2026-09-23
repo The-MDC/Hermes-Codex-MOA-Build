@@ -2,7 +2,7 @@
 name: security-audit
 description: "Security guidance and vulnerability review for codebases, APIs, services, CLI tools, libraries, and daemons. Use for security questions, focused reviews, vulnerability research, security audits, or pen tests. Run the complete workflow only for explicit codebase audit or pen-test requests, full/comprehensive/end-to-end reviews, or requested report artifacts."
 version: 1.0.0
-author: "Cloudflare (https://github.com/cloudflare/security-audit-skill) — ported for Hermes Agent by MADHATs"
+author: "Cloudflare (https://github.com/cloudflare/security-audit-skill) — ported for Hermes Agent"
 license: "MIT"
 platforms: [linux, macos, windows]
 metadata:

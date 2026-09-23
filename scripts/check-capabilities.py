@@ -26,8 +26,8 @@ WHAT IT CHECKS, and why each one earns its place
     4. Frontmatter is valid. THIS IS THE ONE THAT WAS SILENTLY BROKEN. A skill with a
        missing or malformed metadata block loads without complaint and simply never
        triggers; the port script's own header says so and nothing ever checked it.
-       Three MAD Gambit skills -- investor-pitch, mpp-platform, smart-contracts --
-       have no YAML frontmatter at all and have therefore never fired.
+       Three product skills shipped with no YAML frontmatter at all and therefore
+       never fired. They have since been removed from this repo entirely.
 
 NAME RESOLUTION DIFFERS BY SURFACE, deliberately
     Hermes looks a skill up by its DIRECTORY name (hermes-skills/<cat>/<name>/SKILL.md).

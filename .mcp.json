@@ -3,7 +3,7 @@
     "supabase": {
       "type": "url",
       "url": "https://mcp.supabase.com/mcp",
-      "description": "Supabase DB access \u2014 MADHATs platform database"
+      "description": "Supabase DB access \u2014 project database"
     },
     "github": {
       "type": "url",

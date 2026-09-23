@@ -1,4 +1,26 @@
-
 # python bytecode — the CI Syntax step runs py_compile over scripts/*.py
 __pycache__/
 *.pyc
+
+# CREDENTIALS NEVER BELONG IN THIS REPO.
+#
+# Hermes reads every remote provider's key from $HERMES_HOME/.env at runtime, and
+# configs/hermes/config.yaml names those vars via `key_env` and holds no value. That
+# separation is the whole design -- but nothing enforced it here: this file protected
+# bytecode and nothing else, so a .env dropped in the repo root would have been
+# committed without a word. The scan that found this also confirmed the tree and every
+# branch's history are clean, which is a state worth keeping rather than rediscovering.
+.env
+.env.*
+*.env
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials.json
+# Hermes writes timestamped backups of the installed config; one of those carried a
+# bearer token inline once. They belong on the box, never here.
+config.yaml.bak-*
+*.bak-*

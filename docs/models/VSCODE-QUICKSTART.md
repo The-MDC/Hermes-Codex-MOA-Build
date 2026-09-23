@@ -1,6 +1,6 @@
 # VS Code quickstart — local tier + DeepSeek, on Windows
 
-The fast path. Gets `hermes3:8b`, `nemotron-nano:12b-v2` and both DeepSeek tiers
+The fast path. Gets `hermes3:8b` and both DeepSeek tiers
 working, and nothing else. The full bring-up, including MCP servers and the two
 known blockers, is `TAKEOVER.md`; this is the subset you need before any of that
 matters.
@@ -33,8 +33,8 @@ $PSVersionTable.PSVersion.Major
 
 ```powershell
 cd $HOME
-git clone https://github.com/The-MDC/MADHATs-Claude-Enhancement.git
-cd MADHATs-Claude-Enhancement
+git clone https://github.com/The-MDC/hermes-codex-build.git
+cd hermes-codex-build
 git checkout claude/lucid-noether-0ui54b
 ```
 
@@ -102,120 +102,6 @@ This one model already unblocks five of the eight auxiliary slots — routing,
 classification, tool selection, titles, curation. If you stop here you have a
 working floor.
 
-### 2.2 — Try the registry before building anything
-
-The heavier model may already be published to Ollama, in which case you skip the
-GGUF import entirely. **Try this first:**
-
-```powershell
-ollama pull nemotron-nano:12b-v2
-```
-
-**If that succeeds:** skip to 2.5. **If it 404s**, that tag is not in the
-registry and you build it from the GGUF below. Either outcome is normal; the
-registry's naming does not always match ours.
-
-### 2.3 — Download the GGUF
-
-`hf` is not installed by default. Install it first:
-
-```powershell
-pip install -U "huggingface_hub[cli]"
-hf --version
-```
-
-**Success:** a version prints. If `pip` is missing, install Python from
-`winget install Python.Python.3.12`, reopen the terminal, and retry.
-
-Then pull **only** the Q5_K_M. Without `--include` you download every quant in
-the repo — tens of GB you will not use.
-
-```powershell
-hf download bartowski/nvidia_NVIDIA-Nemotron-Nano-12B-v2-GGUF `
-  --include '*Q5_K_M*.gguf' `
-  --local-dir "$HOME\Models\nemotron-nano-12b-v2"
-```
-
-**Success:** exactly one `.gguf` of about **8.76 GB**:
-
-```powershell
-Get-ChildItem "$HOME\Models\nemotron-nano-12b-v2" -Recurse -Filter *.gguf |
-  Select-Object Name, @{n='GB';e={[math]::Round($_.Length/1GB,2)}}
-```
-
-**If the directory is empty after the command returns,** stop. That is exactly
-how the previous attempt at this step failed — the command returned, the file
-never appeared. Re-run once; if it is still empty, it is a network or auth
-problem, not a naming one.
-
-### 2.4 — Import it
-
-Write the Modelfile using the **actual** filename from the previous step:
-
-```powershell
-cd "$HOME\Models\nemotron-nano-12b-v2"
-$gguf = (Get-ChildItem -Recurse -Filter *.gguf | Select-Object -First 1).FullName
-"FROM $gguf" | Set-Content .\Modelfile -Encoding ascii
-Get-Content .\Modelfile
-ollama create nemotron-nano:12b-v2 -f .\Modelfile
-```
-
-**Success:** `ollama list` shows `nemotron-nano:12b-v2`. **The tag must match
-exactly** — `configs/hermes/config.yaml` names that string, and a mismatch does
-not error, it silently resolves to a different model.
-
-If `ollama create` rejects the file, the architecture is the likely cause: this
-is a hybrid Mamba-Transformer (`nemotron_h`), and older llama.cpp builds cannot
-load it. Update Ollama and retry once before escalating.
-
-### 2.5 — Prove generation
-
-```powershell
-ollama run nemotron-nano:12b-v2 "Reply with exactly: ready"
-```
-
-**Success:** the reply contains `ready`.
-
-### 2.6 — Prove TOOL CALLING
-
-**Do not skip this.** It is the only step that catches a wrong chat template, and
-a wrong template degrades tool use while ordinary chat still looks perfect.
-
-```powershell
-$body = @{
-  model = 'nemotron-nano:12b-v2'
-  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
-  tools = @(@{
-    type = 'function'
-    function = @{
-      name = 'get_weather'
-      description = 'Get current weather for a city'
-      parameters = @{
-        type = 'object'
-        properties = @{ city = @{ type='string' } }
-        required = @('city')
-      }
-    }
-  })
-} | ConvertTo-Json -Depth 10
-
-(Invoke-RestMethod -Method Post `
-  -Uri 'http://127.0.0.1:11434/v1/chat/completions' `
-  -ContentType 'application/json' -Body $body).choices[0].message |
-  ConvertTo-Json -Depth 10
-```
-
-**Success:** the response contains a `tool_calls` array naming `get_weather`.
-
-**Failure looks like** prose about the weather, or prose *describing* the tool it
-would call. Both mean the template is wrong and the fix is a `TEMPLATE` directive
-in the Modelfile — a judgment call, so escalate rather than guess.
-
-Repeat this test for `hermes3:8b` by changing the `model` line. It carries five
-auxiliary slots, so its tool calling matters more than the heavy model's.
-
----
-
 ## 3. DeepSeek
 
 **Nothing is installed locally.** DeepSeek-V4-Pro is 1.6T parameters and
@@ -256,7 +142,7 @@ step 4 checks them explicitly.
 ### 3.3 — Install the config
 
 ```powershell
-cd $HOME\MADHATs-Claude-Enhancement
+cd $HOME\hermes-codex-build
 pwsh -File scripts\hermes-apply.ps1 -WhatIf     # look first
 pwsh -File scripts\hermes-apply.ps1
 ```
@@ -314,8 +200,8 @@ parent      hf-router     DeepSeek-V4-Pro        API only
 subagents   nvidia-nim    Nemotron-3-Super-120B  API only
 fallback    or-fallback   DeepSeek-V4.1-Flash    API only, also 2 heavy aux slots
 floor       local         hermes3:8b             5 aux slots, offline-capable
-            local         nemotron-nano:12b-v2   heavier local work
-vision      local-vl      nemotron-nano-12b-v2-vl  NOT SET UP BY THIS FILE
+vision +    local-vl      nemotron-nano-12b-v2-vl  NOT SET UP BY THIS FILE
+heavy local                                        images AND heavy local text
 ```
 
 Not covered here, deliberately: the seven MCP servers, `hermes-council`'s

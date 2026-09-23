@@ -23,7 +23,7 @@ param(
     # pass -- so each stage only requires what it was supposed to deliver.
     #
     #   a     hermes3:8b only. The minimal working floor.
-    #   b     adds nemotron-nano:12b-v2 and the Codex bridge.
+    #   b     adds the llama-server vision runner and the Codex bridge.
     #   full  everything, including the hosted MCP servers. (default)
     [ValidateSet('a', 'b', 'full')]
     [string]$Stage = 'full',
@@ -149,16 +149,14 @@ if ($ollama) {
     # A tag mismatch is not a loud failure: Hermes resolves the miss by falling
     # back to the main model, so you get an answer from the wrong tier.
     #
-    # Stage a ships hermes3:8b alone, so the heavier model is only REQUIRED from
-    # stage b onward. It is still reported at stage a, as information.
-    $required = if ($Stage -eq 'a') { @('hermes3:8b') }
-                else { @('hermes3:8b', 'nemotron-nano:12b-v2') }
-    foreach ($m in @('hermes3:8b', 'nemotron-nano:12b-v2')) {
+    # Ollama carries the FLOOR only. Heavy local work and every image goes to
+    # llama-server on :8080, checked in its own section below -- Ollama cannot serve
+    # a VL model's vision at all, so there is no second Ollama tag to require here.
+    foreach ($m in @('hermes3:8b')) {
         if ($tags -match [regex]::Escape($m)) { Ok "$m present" }
-        elseif ($m -in $required) {
+        else {
             Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back"
         }
-        else { Info "$m not present yet - not required until stage b" }
     }
 
     $port = Test-Port '127.0.0.1' 11434
@@ -242,6 +240,24 @@ if ($hermes) {
     if ($mcpOut -match 'hermes-council' -and $mcpOut -match '(?i)error|failed|unsupported') {
         Warn 'hermes-council is erroring - check WHICH interpreter it ran under (scripts/hermes-blockers.ps1) before suspecting packages'
     }
+    # Upstream optional skills this build DEPENDS on, declared in capabilities.yaml's
+    # `upstream_skills` section. They ship with Hermes rather than with this repo, so
+    # check-capabilities.py cannot see them -- it only walks this tree. The box is the
+    # only place the question "is it actually enabled?" has an answer, so it is asked
+    # here. Warn rather than Fail: each one is a capability gap, not a broken install.
+    if ($Stage -ne 'a') {
+        $skillOut = (& hermes skills list 2>&1 | Out-String)
+        $upstream = @{
+            'searxng-search'             = 'web.search_backend is searxng and nothing teaches its use'
+            'mcporter'                   = 'the only way to diagnose a silently-filtered MCP server'
+            'subagent-driven-development' = 'delegation and moa are configured but untaught'
+        }
+        foreach ($s in $upstream.Keys) {
+            if ($skillOut -match [regex]::Escape($s)) { Ok "upstream skill $s enabled" }
+            else { Warn "upstream skill $s NOT enabled - $($upstream[$s])" }
+        }
+    }
+
     # Same check, one runtime over. config.yaml names this launcher as codex-mcp's
     # command, and an unset variable means the server never starts -- which surfaces
     # as the Codex tools simply being absent, not as an error.
