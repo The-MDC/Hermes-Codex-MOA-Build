@@ -10,6 +10,14 @@
 #     NVIDIA_API_KEY=nvapi-...      https://build.nvidia.com  -> "Get API Key"
 #     HF_TOKEN=hf_...               https://huggingface.co/settings/tokens
 #     OPENROUTER_API_KEY=sk-or-v1-...   https://openrouter.ai/keys
+#     ANTHROPIC_API_KEY=sk-ant-...  https://console.anthropic.com/settings/keys
+#       Optional. Enables `anthropic-direct` (see providers: below), which is NOT
+#       wired into any tier by default -- absence changes nothing else. USE A KEY
+#       DEDICATED TO THIS PROVIDER, distinct from whatever authenticates Claude
+#       Code or any other Anthropic surface on this machine: two consumers on one
+#       account is invisible to both of them until a bill or a rate limit says
+#       otherwise, which is the exact failure `openai-codex` is excluded below to
+#       prevent for ChatGPT. Same shape, different vendor.
 # The local tier needs no key at all — it is a server on your own machine.
 #
 # ---------------------------------------------------------------------------
@@ -276,6 +284,63 @@ providers:
     # it sees, and it reads screenshots badly.
     context_length: 16384
 
+  anthropic-direct:
+    name: "Anthropic (OpenAI-compatible endpoint)"
+    #
+    # NOT WIRED INTO ANY TIER. Added available-but-unassigned, on request, on
+    # 2026-09-25. No parent, delegation, fallback, MoA or auxiliary slot points
+    # here. Reachable only via `/model custom:anthropic-direct:claude-sonnet-5`.
+    # Wiring it into a role is a separate, deliberate edit -- see the MoA
+    # aggregator comment below for why it was kept out of that slot specifically.
+    #
+    # THIS ROUTES THROUGH ANTHROPIC'S OWN OPENAI-COMPATIBLE ENDPOINT, not a
+    # third-party proxy and not the native Messages API. Anthropic ships a
+    # `/v1/chat/completions` surface built for exactly this transport, alongside
+    # the native `/v1/messages` used by the Anthropic SDKs.
+    #
+    # VERIFIED LIVE 2026-09-25, not assumed from training data -- this repo's own
+    # standard after the or-fallback model-id incident. Two no-credential probes
+    # against the real endpoint, no real key ever sent:
+    #   1. POST /v1/chat/completions, no auth header at all -> 401 with an
+    #      OpenAI-shaped error body ({"error":{"code":...,"type":
+    #      "invalid_request_error"}}). A garbage `Authorization: Bearer` token
+    #      produces the SAME shape (still "invalid", not "missing header") --
+    #      confirming the endpoint reads Bearer auth and answers in OpenAI's
+    #      error schema, which is what this file's `chat_completions` transport
+    #      needs from every provider it talks to.
+    #   2. The SAME garbage token against `x-api-key` on the same path returns a
+    #      DIFFERENT error shape ({"type":"error","error":{"type":
+    #      "authentication_error", ...}}) -- Anthropic's native format. The
+    #      endpoint auto-detects which header style you used and replies in the
+    #      matching schema, which only a real compatibility shim does.
+    #   3. For comparison, POST /v1/messages (the real native endpoint) with no
+    #      auth returned "x-api-key header is required" -- a third, distinct
+    #      response, proving /chat/completions is not just an alias of it.
+    #
+    # NOT VERIFIED, AND THE GAP IS REAL: GET /v1/models on this same host
+    # answered a Bearer token with "invalid x-api-key" -- the completions path
+    # accepts Bearer, the Models API does not. hermes-verify.ps1's catalog probe
+    # is patched for this one provider (`-CatalogAuthHeader x-api-key`) because
+    # of that finding; do not remove the override without re-testing this split.
+    # Whether a REAL key's completion actually returns claude-sonnet-5 content
+    # was never tested here -- no real credential exists in this environment, and
+    # this file does not invent one. `hermes-verify.ps1 -Deep` is what closes
+    # that gap, the same way it already does for the other three tiers.
+    api: https://api.anthropic.com/v1
+    key_env: ANTHROPIC_API_KEY
+    transport: chat_completions
+    default_model: claude-sonnet-5
+    models:
+      - claude-sonnet-5
+    # Pin the picker to the line above, matching every other entry in this file.
+    discover_models: false
+    # From the claude-api skill's live model table (cached 2026-06-24, re-checked
+    # 2026-09-25): 1,000,000-token context, $2.00 / $10.00 per MTok in / out.
+    # Held below the architectural ceiling for the same reason hf-router is:
+    # this compat SHIM's own per-request window was never measured against a
+    # real key, so raise this only once `-Deep` confirms what it actually serves.
+    context_length: 200000
+
 model:
   # Named-provider form. Routes by provider key rather than by model-name
   # detection — the detection path has an open bug where a model name matching
@@ -335,11 +400,29 @@ moa:
       model: deepseek-ai/DeepSeek-V4-Pro
       enabled: true
   aggregator:
-    # Deliberately NOT Anthropic. `anthropic` is in excluded_providers, so naming
-    # it here would resolve to nothing at all — and un-excluding it to fix that
-    # would un-hide the entire built-in Anthropic catalog in the picker and put a
-    # metered call on every MoA turn. Claude stays where it already is: Claude
-    # Code, not inside the Hermes routing table.
+    # DELIBERATELY NOT anthropic-direct, EVEN THOUGH IT NOW EXISTS.
+    #
+    # This comment used to say Claude was "not inside the Hermes routing table."
+    # That stopped being true the moment `anthropic-direct` was added -- Claude
+    # Sonnet 5 IS reachable from Hermes now, on request, via /model. This slot
+    # still does not use it, and the ORIGINAL reasoning still holds on its own
+    # terms, so it is restated rather than deleted:
+    #
+    #   cost — every MoA turn would carry a metered $2/$10-per-MTok call on top
+    #   of whatever the reference model already costs, on a config whose whole
+    #   thesis is that requests (not money) are the scarce resource for the rest
+    #   of the stack. That thesis does not apply to a metered API tier the same
+    #   way, which is exactly why this tier was kept OUT of anything automatic.
+    #
+    #   self-grading — the reference pool is DeepSeek-V4-Pro. Aggregating with
+    #   another frontier model from a DIFFERENT family is closer to what MoA is
+    #   for than aggregating with more of the same family would be, so Claude
+    #   is not a bad technical fit here. That is a reason it COULD move here
+    #   later, not a reason it silently did.
+    #
+    # If you want Claude as the aggregator, that is a one-line, deliberate edit
+    # (provider: "custom:anthropic-direct", model: claude-sonnet-5) — not this
+    # comment's job to make for you.
     provider: "custom:nvidia-nim"
     model: nvidia/nemotron-3-super-120b-a12b
   presets:
@@ -397,6 +480,7 @@ web:
 #   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
 #   /model custom:local:hermes3:8b
 #   /model custom:local-vl:nemotron-nano-12b-v2-vl      (needs llama-server on :8080)
+#   /model custom:anthropic-direct:claude-sonnet-5       (needs ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 excluded_providers:
   # EXACT LOWERCASE SET MATCH, NOT SUBSTRING. Verified in the hermes-agent source

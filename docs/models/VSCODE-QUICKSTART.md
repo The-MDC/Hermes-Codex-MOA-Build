@@ -136,6 +136,21 @@ Only `NVIDIA_API_KEY` is strictly required for Hermes to start. Missing either
 other key makes that tier fail over silently rather than error, which is why
 step 4 checks them explicitly.
 
+**Optional fourth key**, only if you want Claude reachable from inside Hermes:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+From console.anthropic.com/settings/keys. **Use a key dedicated to this
+provider** — not whatever authenticates Claude Code or any other Anthropic
+surface on this machine, or spend on one becomes invisible to the other, the
+same failure this config already excludes `openai-codex` to prevent for
+ChatGPT. Enables `anthropic-direct` — reachable via
+`/model custom:anthropic-direct:claude-sonnet-5`, wired into nothing by
+default. Its absence changes no other tier; skip it if you don't need Claude
+inside Hermes specifically.
+
 **Never put a key in `config.yaml`.** CI rejects key-shaped strings there, and
 `hermes-verify.ps1` checks the installed copy too.
 
