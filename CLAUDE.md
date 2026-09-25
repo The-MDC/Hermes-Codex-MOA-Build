@@ -14,7 +14,7 @@ content, and the port fails if one survives into the output tree.
 
 ```
 parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
-subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b  high-compute delegation
+subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5  high-compute delegation
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
 floor       custom:local         hermes3:8b (Ollama)                offline, 5 aux slots
 vision +    custom:local-vl      nemotron-nano-12b-v2-vl            llama.cpp :8080, NOT Ollama
@@ -26,6 +26,23 @@ Anthropic's OpenAI-compatible endpoint) exists in `providers:` and is deliberate
 wired into none of the five roles above — reachable only via
 `/model custom:anthropic-direct:claude-sonnet-5`. See the comment on that entry and
 on the MoA `aggregator:` block for why it was kept out.
+
+`fallback_providers:` is an ordered chain, not a single role — the table's one
+`fallback` row is now two links deep. As of 2026-09-25: **fallback 1** is
+`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, same
+bucket `nvidia-nim` already spends on subagents — a fallback firing there now
+competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
+still shows; local `hermes3:8b` remains last resort. That model id was NOT
+live-verified from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com
+are both egress-blocked there) — see the comment on the entry itself in
+`config.yaml` for the triangulation and the exact command to self-verify it.
+
+**Nemotron-3-Super-120B-A12B is retired from this file, on request (2026-09-25).**
+The `nvidia-nim` provider's `default_model`, `delegation:`, and the MoA
+`aggregator:` all now point at the same 49B model as the fallback entry above —
+subagents and fallback 1 are no longer diversified by model size, only by which
+failure each answers (the parent going down, vs. delegation routing). No
+reference to the 120B model remains anywhere in `config.yaml`.
 
 Three rules that have each cost a session here:
 
