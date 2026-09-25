@@ -16,7 +16,7 @@ but not the floor.
 | Tier | Provider | Model | Role |
 |---|---|---|---|
 | parent | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | 1.6T (49B active), 1M ctx |
-| subagents | `custom:nvidia-nim` | `nvidia/nemotron-3-super-120b-a12b` | high-compute delegation |
+| subagents | `custom:nvidia-nim` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | high-compute delegation |
 | fallback | `custom:or-fallback` | `deepseek/deepseek-v4.1-flash` | 429 escape, 2 heavy aux slots |
 | floor | `custom:local` | `hermes3:8b` (Ollama) | offline, 5 auxiliary slots |
 | vision + heavy local | `custom:local-vl` | `nemotron-nano-12b-v2-vl` | llama.cpp on :8080, **not** Ollama |
@@ -29,6 +29,10 @@ with delegation traffic), **2)** the DeepSeek entry the table shows above, **3)*
 `hermes3:8b` local, unchanged. That NIM model id was corroborated by three
 independent resellers, not verified first-party — `config.yaml`'s comment on the
 entry has the detail and the self-verify command.
+
+**Nemotron-3-Super-120B-A12B is retired**, on request (2026-09-25): `subagents`
+above and the MoA aggregator both moved to the same 49B model as the fallback
+link. No reference to the 120B model remains in `config.yaml`.
 
 **A model id belongs to the gateway, not to the model.** The same weights carry
 different ids per gateway — Hugging Face calls it `deepseek-ai/DeepSeek-V4.1-Flash`,

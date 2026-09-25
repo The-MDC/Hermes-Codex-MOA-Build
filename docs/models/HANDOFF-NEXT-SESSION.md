@@ -29,7 +29,9 @@ Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.
 
 ```
 parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       1.6T / 49B active, 1M ctx
-subagents   custom:nvidia-nim    nvidia/nemotron-3-super-120b-a12b high-compute delegation
+subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5 high-compute delegation
+            (swapped from nemotron-3-super-120b-a12b 2026-09-25, on request --
+             120B is retired, no reference to it remains in config.yaml)
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
 floor       custom:local         hermes3:8b                        Ollama, 5 aux slots
 
@@ -39,11 +41,12 @@ heavy local                                                        images AND he
 auxiliary   5 slots -> hermes3:8b          routing, classification, titles, approval, curator
             2 slots -> V4.1-Flash          compression, web_extract
             1 slot  -> local-vl            vision
-moa         V4.1-Flash reference -> NIM Nemotron 120B aggregator
+moa         V4.1-Flash reference -> NIM Nemotron 49B aggregator (was 120B)
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
 
 fallback_providers (ordered, added-to 2026-09-25):
-  1. nvidia/llama-3.3-nemotron-super-49b-v1.5 on nvidia-nim (cloud, SAME bucket as subagents)
+  1. nvidia/llama-3.3-nemotron-super-49b-v1.5 on nvidia-nim (cloud, SAME bucket
+     AND, since the 120B->49B swap, SAME model as subagents/delegation)
   2. deepseek/deepseek-v4.1-flash on or-fallback              (was fallback 1)
   3. hermes3:8b local                                          (last resort, unchanged)
 
@@ -99,13 +102,15 @@ cannot see.
 - **Whether a current llama.cpp build actually loads this VL model with its projector.** The
   GGUF and the mmproj both exist and `nemotron_v2_vl` is supported (PR #19547); the two together on
   a real build is the part nothing here can exercise. It fails loudly if not.
-- **`nvidia/llama-3.3-nemotron-super-49b-v1.5`, fallback_providers[0]'s model id
-  (added 2026-09-25).** build.nvidia.com and docs.api.nvidia.com are both
-  egress-blocked from this build container, so this could not be checked live the
-  way `nvidia-nim`'s own entry was. Corroborated by three independent resellers
-  proxying NIM (Puter, WaveSpeedAI, AIMLAPI), not first-party. Run
+- **`nvidia/llama-3.3-nemotron-super-49b-v1.5`.** Added 2026-09-25 as
+  fallback_providers[0]; as of the same day it is ALSO `nvidia-nim`'s own
+  `default_model` (subagents/delegation, MoA aggregator), replacing
+  nemotron-3-super-120b-a12b entirely on request. Neither use is live-verified:
+  build.nvidia.com and docs.api.nvidia.com are both egress-blocked from this
+  build container. Corroborated by three independent resellers proxying NIM
+  (Puter, WaveSpeedAI, AIMLAPI), not first-party. Run
   `bash scripts/nim-preflight.sh --list | grep -i nemotron-super-49b` on the box
-  before trusting it.
+  before trusting either use of it.
 - **`anthropic-direct` under a real key.** Verified live with garbage credentials
   only (two probes distinguishing this endpoint's OpenAI-shaped vs. Anthropic-shaped
   errors, and that `/models` needs `x-api-key` not `Bearer`) — never confirmed that
