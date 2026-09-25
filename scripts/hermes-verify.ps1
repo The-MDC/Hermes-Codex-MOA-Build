@@ -115,6 +115,15 @@ if (-not (Test-Path $EnvPath)) {
         if ($envRaw -match "(?m)^\s*$k\s*=\s*\S") { Ok "$k is set" }
         else { Warn "$k not set - the tier that uses it will fail over" }
     }
+    # ANTHROPIC_API_KEY is not one of the three above ON PURPOSE: nothing in
+    # config.yaml is wired to anthropic-direct, so its absence breaks nothing.
+    # Reported as information, not a warning -- a warning here would train
+    # someone to "fix" a gap that costs the stack nothing.
+    if ($envRaw -match "(?m)^\s*ANTHROPIC_API_KEY\s*=\s*\S") {
+        Ok 'ANTHROPIC_API_KEY is set (anthropic-direct - unwired, available via /model)'
+    } else {
+        Info 'ANTHROPIC_API_KEY not set - anthropic-direct unusable, nothing else affected'
+    }
 }
 
 # Portable TCP reachability check.
@@ -330,13 +339,24 @@ if ($Deep) {
     # identical whether the model id is wrong or the account is out of quota, so
     # the catalog is checked FIRST: it isolates "this id does not exist here",
     # which is the failure this repo keeps hitting and CI cannot see.
-    function Probe($name, $url, $keyVar, $model) {
+    function Probe($name, $url, $keyVar, $model, $CatalogAuthHeader = 'Authorization', $CatalogAuthPrefix = 'Bearer ') {
         $key = Get-ProviderKey $keyVar
         if (-not $key) { Warn "$name skipped - $keyVar not in the environment or $EnvPath"; return }
         $auth = @{ Authorization = "Bearer $key" }
 
+        # The completions leg below always uses Bearer -- every OpenAI-compatible
+        # gateway this file talks to accepts it there, confirmed live per provider
+        # (see config.yaml). The CATALOG leg is not always the same endpoint under
+        # the same rules: Anthropic's /chat/completions accepts Bearer, but its
+        # /models is the NATIVE Models API and answered a Bearer token with
+        # "invalid x-api-key" when tested live 2026-09-25 -- it wants the raw key
+        # under x-api-key, no prefix. $CatalogAuthHeader/$CatalogAuthPrefix exist
+        # for exactly that split; every other caller omits them and gets the
+        # original Bearer-everywhere behavior unchanged.
+        $catalogAuth = @{ $CatalogAuthHeader = "$CatalogAuthPrefix$key" }
+
         try {
-            $cat = Invoke-RestMethod -Method Get -Uri "$url/models" -Headers $auth -TimeoutSec 30
+            $cat = Invoke-RestMethod -Method Get -Uri "$url/models" -Headers $catalogAuth -TimeoutSec 30
             $ids = @($cat.data | ForEach-Object { $_.id })
             if ($ids -contains $model) {
                 Ok "$name catalog lists '$model' ($($ids.Count) models visible to this key)"
@@ -402,7 +422,7 @@ if ($Deep) {
         return $null
     }
 
-    function Probe-Configured($name, $keyVar) {
+    function Probe-Configured($name, $keyVar, $CatalogAuthHeader = 'Authorization', $CatalogAuthPrefix = 'Bearer ') {
         $url   = Get-ProviderField $name 'api'
         $model = Get-ProviderField $name 'default_model'
         if (-not $url -or -not $model) {
@@ -410,12 +430,18 @@ if ($Deep) {
             return
         }
         Info "$name -> $model @ $url"
-        Probe $name $url $keyVar $model
+        Probe $name $url $keyVar $model $CatalogAuthHeader $CatalogAuthPrefix
     }
 
     Probe-Configured 'hf-router'   'HF_TOKEN'
     Probe-Configured 'nvidia-nim'  'NVIDIA_API_KEY'
     Probe-Configured 'or-fallback' 'OPENROUTER_API_KEY'
+    # Present only if the key is set -- absence is fine (see the toolchain
+    # section above), so this stays silent rather than warning about a tier
+    # nothing depends on.
+    if (Get-ProviderKey 'ANTHROPIC_API_KEY') {
+        Probe-Configured 'anthropic-direct' 'ANTHROPIC_API_KEY' 'x-api-key' ''
+    }
 }
 
 # ---------------------------------------------------------------- verdict

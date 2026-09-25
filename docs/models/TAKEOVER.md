@@ -371,6 +371,13 @@ Only `NVIDIA_API_KEY` is strictly required to start. `HF_TOKEN` enables the pare
 tier and `OPENROUTER_API_KEY` the fallback, so a stack missing either will run
 degraded rather than fail loudly.
 
+A fourth, fully optional key, `ANTHROPIC_API_KEY`, enables `anthropic-direct`
+(claude-sonnet-5) — unwired into any tier, reachable only via
+`/model custom:anthropic-direct:claude-sonnet-5`. Absent, nothing else is
+affected. If set, use a key dedicated to this provider, never one shared with
+Claude Code or another Anthropic surface on this machine — see the comment on
+`anthropic-direct` in `config.yaml` for why.
+
 ### Step 2.3 — Render token
 
 `render` is deliberately absent from this config. Its endpoint failed DNS

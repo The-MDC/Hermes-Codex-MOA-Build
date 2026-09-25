@@ -21,6 +21,12 @@ vision +    custom:local-vl      nemotron-nano-12b-v2-vl            llama.cpp :8
 heavy local                                                         images AND heavy local text
 ```
 
+This diagram lists ROLES, not every provider. `anthropic-direct` (claude-sonnet-5,
+Anthropic's OpenAI-compatible endpoint) exists in `providers:` and is deliberately
+wired into none of the five roles above — reachable only via
+`/model custom:anthropic-direct:claude-sonnet-5`. See the comment on that entry and
+on the MoA `aggregator:` block for why it was kept out.
+
 Three rules that have each cost a session here:
 
 1. **A model id belongs to the GATEWAY, not the model.** The same weights carry
