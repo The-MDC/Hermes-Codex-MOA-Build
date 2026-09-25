@@ -354,6 +354,40 @@ model:
 fallback_providers:
   # A 429 or an outage on the parent falls through to a different provider rather
   # than stopping.
+  #
+  # FALLBACK 1 -- added 2026-09-25, on request. NVIDIA NIM, cloud-hosted. This is
+  # NOT the laptop: an Unsloth UD-Q8_K_XL GGUF of this same model family was
+  # downloaded locally first, then explicitly redirected here once the target
+  # turned out to be a cloud box, not the laptop the `local`/`local-vl` tiers run
+  # on. That download is UNCONNECTED to how this entry actually serves -- NIM
+  # serves its own hosted build of the model; it does not take an uploaded GGUF.
+  #
+  # MODEL ID NOT LIVE-VERIFIED FROM THIS REPO'S SANDBOX. build.nvidia.com and
+  # docs.api.nvidia.com are both blocked by this environment's egress proxy, so
+  # this could not be checked live the way the `nvidia-nim` provider's own entry
+  # above was (see its "Verified against the live endpoint" comment). The id
+  # below is corroborated by THREE independent resellers proxying NVIDIA's NIM
+  # catalog (Puter, WaveSpeedAI, AIMLAPI), all showing the identical string in
+  # their curl examples -- triangulated, not first-party. Confirm it for real
+  # before trusting this tier:
+  #     bash scripts/nim-preflight.sh --list | grep -i nemotron-super-49b
+  # nim-preflight's --list prints every model id this NVIDIA_API_KEY can reach,
+  # scoped to your account -- the same self-verification nim-preflight.sh already
+  # gives every other NIM id in this file, so no new tooling is needed for this.
+  #
+  # SAME BUCKET AS `nvidia-nim` ABOVE, ON PURPOSE OR NOT -- WORTH KNOWING EITHER
+  # WAY. This entry reuses NVIDIA_API_KEY and build.nvidia.com, the identical
+  # rate-limit bucket `delegation:` already spends on subagents. A fallback
+  # firing here now competes with in-flight subagent calls for the same ~40 RPM,
+  # where the parent's OWN fallback (the DeepSeek entry just below) sits on a
+  # bucket nothing else touches. If that trade is unwanted, move this to its own
+  # credential or accept that a bad subagent fan-out can starve this fallback too.
+  - provider: custom
+    model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    base_url: https://integrate.api.nvidia.com/v1
+    key_env: NVIDIA_API_KEY
+  # FALLBACK 2 (was fallback 1 until the entry above was added 2026-09-25).
+  # Unchanged in content -- only its position in the chain shifted.
   - provider: custom
     model: deepseek/deepseek-v4.1-flash
     base_url: https://openrouter.ai/api/v1

@@ -21,6 +21,15 @@ but not the floor.
 | floor | `custom:local` | `hermes3:8b` (Ollama) | offline, 5 auxiliary slots |
 | vision + heavy local | `custom:local-vl` | `nemotron-nano-12b-v2-vl` | llama.cpp on :8080, **not** Ollama |
 
+The `fallback` row compresses an ordered chain in `fallback_providers:`. As of
+2026-09-25 it is two cloud links deep before the local last resort: **1)**
+`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, reusing
+the `nvidia-nim` bucket subagents already spend — a fallback there now competes
+with delegation traffic), **2)** the DeepSeek entry the table shows above, **3)**
+`hermes3:8b` local, unchanged. That NIM model id was corroborated by three
+independent resellers, not verified first-party — `config.yaml`'s comment on the
+entry has the detail and the self-verify command.
+
 **A model id belongs to the gateway, not to the model.** The same weights carry
 different ids per gateway — Hugging Face calls it `deepseek-ai/DeepSeek-V4.1-Flash`,
 OpenRouter calls it `deepseek/deepseek-v4.1-flash` — and an id copied between

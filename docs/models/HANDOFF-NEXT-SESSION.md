@@ -7,8 +7,9 @@ authoritative version does not rot the same way. Dated records still have a plac
 `handoff-2026-09-22.md` is a record of *what was reported on a day* and is annotated
 rather than edited — but "what is true now" belongs here, and only here.
 
-Last updated: 2026-09-22 · Branch: `claude/lucid-noether-0ui54b` (reset from `The-MDC`
-after PR #13 merged) · PR #13 **merged**
+Last updated: 2026-09-25 · Branch: `claude/lucid-noether-0ui54b` (reset from `The-MDC`
+after PR #13 merged) · PR #13 **merged**, PR #17 open (`anthropic-direct` +
+inventory script + this fallback change)
 
 ---
 
@@ -40,6 +41,15 @@ auxiliary   5 slots -> hermes3:8b          routing, classification, titles, appr
             1 slot  -> local-vl            vision
 moa         V4.1-Flash reference -> NIM Nemotron 120B aggregator
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
+
+fallback_providers (ordered, added-to 2026-09-25):
+  1. nvidia/llama-3.3-nemotron-super-49b-v1.5 on nvidia-nim (cloud, SAME bucket as subagents)
+  2. deepseek/deepseek-v4.1-flash on or-fallback              (was fallback 1)
+  3. hermes3:8b local                                          (last resort, unchanged)
+
+anthropic-direct (claude-sonnet-5, Anthropic's OpenAI-compat endpoint) exists in
+providers: since 2026-09-25, wired into NOTHING above -- reachable only via
+/model custom:anthropic-direct:claude-sonnet-5.
 ```
 
 Three structural rules hold this together. Breaking any one fails **silently**:
@@ -89,6 +99,18 @@ cannot see.
 - **Whether a current llama.cpp build actually loads this VL model with its projector.** The
   GGUF and the mmproj both exist and `nemotron_v2_vl` is supported (PR #19547); the two together on
   a real build is the part nothing here can exercise. It fails loudly if not.
+- **`nvidia/llama-3.3-nemotron-super-49b-v1.5`, fallback_providers[0]'s model id
+  (added 2026-09-25).** build.nvidia.com and docs.api.nvidia.com are both
+  egress-blocked from this build container, so this could not be checked live the
+  way `nvidia-nim`'s own entry was. Corroborated by three independent resellers
+  proxying NIM (Puter, WaveSpeedAI, AIMLAPI), not first-party. Run
+  `bash scripts/nim-preflight.sh --list | grep -i nemotron-super-49b` on the box
+  before trusting it.
+- **`anthropic-direct` under a real key.** Verified live with garbage credentials
+  only (two probes distinguishing this endpoint's OpenAI-shaped vs. Anthropic-shaped
+  errors, and that `/models` needs `x-api-key` not `Bearer`) — never confirmed that
+  a real `ANTHROPIC_API_KEY` actually returns `claude-sonnet-5` content. Unwired
+  into any role; `hermes-verify.ps1 -Deep` closes the gap if `ANTHROPIC_API_KEY` is set.
 
 `pwsh -File scripts/hermes-verify.ps1 -Stage full -Deep` now reads each provider's
 endpoint and model id **out of the installed config** rather than restating them, so

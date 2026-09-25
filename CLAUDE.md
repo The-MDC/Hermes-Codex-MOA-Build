@@ -27,6 +27,16 @@ wired into none of the five roles above — reachable only via
 `/model custom:anthropic-direct:claude-sonnet-5`. See the comment on that entry and
 on the MoA `aggregator:` block for why it was kept out.
 
+`fallback_providers:` is an ordered chain, not a single role — the table's one
+`fallback` row is now two links deep. As of 2026-09-25: **fallback 1** is
+`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, same
+bucket `nvidia-nim` already spends on subagents — a fallback firing there now
+competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
+still shows; local `hermes3:8b` remains last resort. That model id was NOT
+live-verified from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com
+are both egress-blocked there) — see the comment on the entry itself in
+`config.yaml` for the triangulation and the exact command to self-verify it.
+
 Three rules that have each cost a session here:
 
 1. **A model id belongs to the GATEWAY, not the model.** The same weights carry
