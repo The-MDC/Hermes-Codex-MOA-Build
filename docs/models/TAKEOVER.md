@@ -3,8 +3,7 @@
 For whoever implements this next, running on the Windows box rather than in CI.
 Self-contained on purpose: you do not need to read another file in this repo to
 execute it. Context for *why* the stack is shaped this way is in
-`running-the-stack.md` and `handoff-2026-09-22.md`; you do not need either to
-follow the steps below.
+`handoff-2026-09-22.md`; you do not need it to follow the steps below.
 
 ## Division of labour
 
