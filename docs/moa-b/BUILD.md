@@ -162,6 +162,29 @@ continuously.
 - To revert, simply delete the profile directory: `rm -rf ~/.hermes/profiles/codex-moa`.
 - Remove attached artifacts with `kanban_attachments` if needed.
 
+## 10. Possible Future Enhancements (unverified, not yet integrated)
+
+None of this is wired into the plan above. It's candidate follow-up work, live-checked
+against NVIDIA's own pages so speculative "could leverage X" language isn't repeated
+as fact. **All of it also depends on a `hermes model load` / `hermes spawn` /
+`kanban_*` CLI surface this repo has no spec for** — these commands appear throughout
+this doc because they were specified that way, not because they've been verified
+against a real Hermes CLI reference. Treat every command below the same way.
+
+| Candidate | What it actually is (live-verified) | Fit for this build |
+|---|---|---|
+| **NemoClaw** | Real, open-source NVIDIA stack ([blog](https://developer.nvidia.com/blog/building-a-memory-driven-agent-with-nvidia-nemoclaw), [docs](https://docs.nvidia.com/nemoclaw/latest/)). Sandboxes "always-on assistant" (OpenClaw) agents with kernel-level isolation, network policy, and local/cloud privacy routing, bundling OpenShell + Nemotron + a Privacy Router. | **Correctly targeted.** The Swarm Coordinator keeps a 25 GB model resident and dispatches continuously — exactly the "always-on agent" shape NemoClaw sandboxes. Worth a real spike before the swarm is wired into anything that touches secrets or the network. |
+| **NVIDIA NIM** | Real, containerized inference microservices with OpenAI-compatible-style APIs, backed by TensorRT-LLM/vLLM/SGLang ([overview](https://developer.nvidia.com/nim)). Either self-hosted or hosted. | Plausible alternative backend for Generator/Audit/Vision instead of raw GGUF+llama.cpp, if this build ever moves off single-box local inference. Not evaluated against this repo's actual `nvidia-nim` provider config. |
+| **TensorRT-LLM** | Real, NVIDIA's optimized LLM inference engine. | Could replace llama.cpp for serving CodeLlama-13B / Ising-Calibration-31B with better throughput — but changes the serving stack this whole doc assumes (`hermes model load --path *.gguf`), so it's a bigger change than a model swap, not a drop-in. |
+| **RAG Blueprint** (`build.nvidia.com/skills` → `rag-blueprint`) | Real, end-to-end RAG deployment reference (Docker/Helm, NIM-backed). | Would give the Reviewer/Audit agents grounded retrieval over this repo's own docs instead of relying on model memory. Independent of the model choices above — additive, not a replacement. |
+
+**Explicitly not carried forward:** the NVIDIA "AI Factory Operations Agent" (FOX)
+blueprint was suggested earlier in this thread as generic Hermes sub-agent
+orchestration. Live-checked ([NVIDIA blog](https://blogs.nvidia.com/blog/factory-operations-fox-blueprint-ai-brain/)):
+FOX is real, but it's a physical-manufacturing blueprint (robot fleets, machine QC,
+industrial IoT integration) — it doesn't do generic software agent orchestration
+and isn't a fit here.
+
 ---
 
 *All steps are designed to be executed from the Hermes desktop app or via its CLI. The plan uses only tools already available in the Hermes environment, ensuring a smooth integration into the existing repo.*
