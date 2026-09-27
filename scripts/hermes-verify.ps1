@@ -22,8 +22,10 @@ param(
     # gate that fails on something the NEXT stage installs is a gate nobody can
     # pass -- so each stage only requires what it was supposed to deliver.
     #
-    #   a     hermes3:8b only. The minimal working floor.
-    #   b     adds the llama-server vision runner and the Codex bridge.
+    #   a     the local floor model only (Hermes-3-Llama-3.2-3B-abliterated:Q8_0,
+    #         swapped from hermes3:8b 2026-09-25).
+    #   b     adds the Codex bridge. (No local vision runner to add anymore --
+    #         local-vl was removed the same day; vision routes to the cloud.)
     #   full  everything, including the hosted MCP servers. (default)
     [ValidateSet('a', 'b', 'full')]
     [string]$Stage = 'full',
@@ -158,72 +160,20 @@ if ($ollama) {
     # A tag mismatch is not a loud failure: Hermes resolves the miss by falling
     # back to the main model, so you get an answer from the wrong tier.
     #
-    # Ollama carries the FLOOR only. Heavy local work and every image goes to
-    # llama-server on :8080, checked in its own section below -- Ollama cannot serve
-    # a VL model's vision at all, so there is no second Ollama tag to require here.
-    foreach ($m in @('hermes3:8b')) {
+    # Ollama carries the floor -- the whole local tier, as of 2026-09-25. `local-vl`
+    # (llama.cpp, a second local server for vision) was removed the same day the
+    # floor model swapped from hermes3:8b to this one; vision now routes to the
+    # cloud (or-fallback), so there is no second local tier to check here anymore.
+    foreach ($m in @('hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0')) {
         if ($tags -match [regex]::Escape($m)) { Ok "$m present" }
         else {
-            Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back"
+            Fail "$m NOT in Ollama - config.yaml names it, so selecting it silently falls back. Pull it with: ollama pull $m"
         }
     }
 
     $port = Test-Port '127.0.0.1' 11434
     if ($port) { Ok 'Ollama answering on 127.0.0.1:11434' }
     else { Fail 'nothing listening on 127.0.0.1:11434 - run `ollama serve`' }
-}
-
-# ------------------------------------------------- local vision (llama.cpp)
-# Only checked when the config actually declares the provider, so an install that
-# reverted `vision` to the cloud route does not get told off about a server it
-# deliberately does not run.
-#
-# The model id is read from the config rather than written here, for the same
-# reason the Deep probes are: two copies of one fact drift, and the copy in the
-# checker is the one that reports green on something Hermes never sends.
-# Read the config fresh rather than reusing $raw from the config section: that
-# variable is only assigned when the file exists, and depending on it here would
-# make this block's behaviour hinge on whether an earlier branch ran.
-$vlCfg = if (Test-Path $ConfigPath) { Get-Content $ConfigPath -Raw } else { $null }
-if ($vlCfg -and $vlCfg -match '(?m)^\s{2}local-vl\s*:') {
-    Section 'local vision (llama.cpp)'
-
-    $vlModel = $null
-    $inBlock = $false
-    foreach ($line in ($vlCfg -split '\r?\n')) {
-        if ($line -match '^\s{2}local-vl\s*:\s*$') { $inBlock = $true; continue }
-        if ($inBlock) {
-            if ($line -match '^\s{0,2}\S') { break }
-            if ($line -match '^\s{4}default_model\s*:\s*(\S+)\s*$') { $vlModel = $Matches[1]; break }
-        }
-    }
-    if (-not $vlModel) {
-        Fail 'local-vl is declared but its default_model could not be read from config.yaml'
-    }
-
-    $vlPort = Test-Port '127.0.0.1' 8080
-    if (-not $vlPort) {
-        # FAIL rather than Warn: `vision` routes here, so a stopped server is a
-        # missing capability, and Hermes surfaces that as a bad answer about an
-        # image rather than as an error. That confusion is the whole reason this
-        # tier exists as its own server.
-        Fail 'nothing listening on 127.0.0.1:8080 - vision routes here, so it is DOWN. Start llama-server with --mmproj (see configs/hermes/config.yaml, local-vl)'
-    } else {
-        Ok 'llama-server answering on 127.0.0.1:8080'
-        try {
-            $vlCat = Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/models' -TimeoutSec 15
-            $vlIds = @($vlCat.data | ForEach-Object { $_.id })
-            if ($vlIds -contains $vlModel) {
-                Ok "llama-server serves '$vlModel'"
-            } else {
-                # Almost always a missing --alias: llama-server otherwise names the
-                # model after its file path, which will not match the config.
-                Fail "llama-server does NOT serve '$vlModel' - it reports: $($vlIds -join ', '). Start it with --alias $vlModel"
-            }
-        } catch {
-            Warn "llama-server catalog unreadable: $($_.Exception.Message)"
-        }
-    }
 }
 
 # ---------------------------------------------------------------- MCP

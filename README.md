@@ -18,17 +18,23 @@ but not the floor.
 | parent | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | 1.6T (49B active), 1M ctx |
 | subagents | `custom:nvidia-nim` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | high-compute delegation |
 | fallback | `custom:or-fallback` | `deepseek/deepseek-v4.1-flash` | 429 escape, 2 heavy aux slots |
-| floor | `custom:local` | `hermes3:8b` (Ollama) | offline, 5 auxiliary slots |
-| vision + heavy local | `custom:local-vl` | `nemotron-nano-12b-v2-vl` | llama.cpp on :8080, **not** Ollama |
+| floor | `custom:local` | `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (Ollama) | offline, 5 auxiliary slots |
 
 The `fallback` row compresses an ordered chain in `fallback_providers:`. As of
 2026-09-25 it is two cloud links deep before the local last resort: **1)**
 `nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, reusing
 the `nvidia-nim` bucket subagents already spend — a fallback there now competes
 with delegation traffic), **2)** the DeepSeek entry the table shows above, **3)**
-`hermes3:8b` local, unchanged. That NIM model id was corroborated by three
-independent resellers, not verified first-party — `config.yaml`'s comment on the
-entry has the detail and the self-verify command.
+the local floor model, unchanged in role. That NIM model id was corroborated by
+three independent resellers, not verified first-party — `config.yaml`'s comment
+on the entry has the detail and the self-verify command.
+
+**There is no `vision + heavy local` tier anymore.** `local-vl`
+(nemotron-nano-12b-v2-vl on llama.cpp :8080) is removed as of 2026-09-25, on
+request, along with the old floor model (hermes3:8b). `vision` routes to
+`custom:or-fallback` now — the same cloud route it used before the local-vl tier
+ever existed. The floor model above is Llama-3.2-based and text-only, so this
+wasn't incidental: there was no vision-capable replacement on the table.
 
 **Nemotron-3-Super-120B-A12B is retired**, on request (2026-09-25): `subagents`
 above and the MoA aggregator both moved to the same 49B model as the fallback
@@ -40,10 +46,12 @@ OpenRouter calls it `deepseek/deepseek-v4.1-flash` — and an id copied between
 providers is wrong by default. `discover_models: false` means Hermes never probes
 `/models`, so a bad id does not error: it silently resolves to the main model.
 
-**The vision tier is a separate server on purpose.** A VL GGUF ships as two files,
-the language model and a separate `mmproj` projector. Ollama cannot attach the
-second, and it does not refuse — `ollama create` *succeeds*, silently dropping
-vision, leaving a model with `-VL` in its name that cannot see.
+**Why the vision tier used to be a separate server**, kept for context even
+though the tier itself is gone: a VL GGUF ships as two files, the language model
+and a separate `mmproj` projector. Ollama cannot attach the second, and it does
+not refuse — `ollama create` *succeeds*, silently dropping vision, leaving a
+model with `-VL` in its name that cannot see. That risk doesn't apply to the
+current floor model since it isn't a vision model at all.
 
 ## Codex
 

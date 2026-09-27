@@ -1,16 +1,21 @@
 # VS Code quickstart — local tier + DeepSeek, on Windows
 
-The fast path. Gets `hermes3:8b` and both DeepSeek tiers
-working, and nothing else. The full bring-up, including MCP servers and the two
-known blockers, is `TAKEOVER.md`; this is the subset you need before any of that
-matters.
+The fast path. Gets the local floor model
+(`hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0`, swapped from
+`hermes3:8b` 2026-09-25) and both DeepSeek tiers working, and nothing else. The
+full bring-up, including MCP servers, is `TAKEOVER.md`; this is the subset you
+need before any of that matters.
 
 Every step has a **success line**. A step is done when the output matches it —
 not when the command exits without complaining. That distinction is the whole
 reason this file is written out rather than improvised: a wrong chat template
 still chats, and a dangling model reference still answers, just on the wrong model.
 
-Total download: about 14 GB. Budget 20–40 minutes on a normal connection.
+Total download: about 3.4 GB. Budget a few minutes on a normal connection --
+smaller and faster than the hermes3:8b pull this replaced (~4.7 GB), and there
+is no second local service to set up: no llama-server, no build-floor check, no
+`--mmproj`. That used to be a separate phase this file did not cover at all;
+now it doesn't exist to cover.
 
 ---
 
@@ -93,10 +98,15 @@ and leave it running.
 ### 2.1 — Support model
 
 ```powershell
-ollama pull hermes3:8b
+ollama pull hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
 ```
 
-~4.7 GB. **Success:** `ollama list` shows `hermes3:8b`.
+~3.4 GB, verified against the Hugging Face repo directly (3,421,895,840 bytes).
+Pulled straight from Hugging Face via Ollama's own `hf.co/` feature -- needs a
+reasonably current Ollama; check `ollama --version` if the pull is rejected.
+**Success:** `ollama list` shows the full tag above. Note it is an "abliterated"
+(refusal-removed) fine-tune -- a real behavior change from hermes3:8b, not just
+a smaller download, and it now backs every slot below including `approval`.
 
 This one model already unblocks five of the eight auxiliary slots — routing,
 classification, tool selection, titles, curation. If you stop here you have a
@@ -130,7 +140,7 @@ OPENROUTER_API_KEY=sk-or-v1-...
 |---|---|---|
 | `HF_TOKEN` | huggingface.co/settings/tokens | **parent** — DeepSeek-V4-Pro |
 | `OPENROUTER_API_KEY` | openrouter.ai/keys | **fallback + heavy aux** — DeepSeek-V4.1-Flash |
-| `NVIDIA_API_KEY` | build.nvidia.com | **subagents** — Nemotron-3-Super-120B |
+| `NVIDIA_API_KEY` | build.nvidia.com | **subagents + fallback 1** — Llama-3.3-Nemotron-Super-49B-v1.5 (swapped from Nemotron-3-Super-120B 2026-09-25) |
 
 Only `NVIDIA_API_KEY` is strictly required for Hermes to start. Missing either
 other key makes that tier fail over silently rather than error, which is why
@@ -211,12 +221,13 @@ replacement model is a design decision, not a retry.
 ## What you have at this point
 
 ```
-parent      hf-router     DeepSeek-V4-Pro        API only
-subagents   nvidia-nim    Nemotron-3-Super-120B  API only
+parent      hf-router     DeepSeek-V4-Pro                              API only
+subagents   nvidia-nim    Llama-3.3-Nemotron-Super-49B-v1.5             API only
+                          (swapped from Nemotron-3-Super-120B 2026-09-25)
 fallback    or-fallback   DeepSeek-V4.1-Flash    API only, also 2 heavy aux slots
-floor       local         hermes3:8b             5 aux slots, offline-capable
-vision +    local-vl      nemotron-nano-12b-v2-vl  NOT SET UP BY THIS FILE
-heavy local                                        images AND heavy local text
+            (+ NVIDIA NIM, same 49B model above, as fallback_providers[0])
+floor       local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0
+                          5 aux slots, offline-capable (swapped from hermes3:8b)
 ```
 
 Not covered here, deliberately: the seven MCP servers, `hermes-council`'s
@@ -224,17 +235,12 @@ dependency fault, and the Codex bridge handshake. None of them gate the model
 tiers. `scripts\hermes-blockers.ps1` diagnoses the last two without changing
 anything, and `TAKEOVER.md` phases 3–6 cover the rest.
 
-**Nor is the vision tier — and that one shows up as a failure.** `config.yaml`
-routes `vision` to a `local-vl` provider served by **llama.cpp on :8080**, not by
-Ollama. Ollama cannot attach the `mmproj` projector a VL model needs, and it fails
-by silently dropping vision rather than refusing, so `ollama create` would leave
-you a model with `-VL` in its name that cannot see. `TAKEOVER.md` step 1.7 sets it
-up properly.
-
-Until you do, `hermes-verify.ps1` FAILs on port 8080. That failure is accurate
-rather than noise: the vision slot genuinely has no backend. Every other tier
-works around it.
-
-If you would rather not run a second local service, revert `vision` in
-`config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`, which is
-natively multimodal and is what fixed that slot originally. One line.
+**There is no vision tier to set up anymore.** Until 2026-09-25 this section
+covered a separate `local-vl` provider (nemotron-nano-12b-v2-vl, llama.cpp on
+:8080) that Ollama could not serve directly -- it cannot attach the `mmproj`
+projector a VL model needs, and fails by silently dropping vision rather than
+refusing. That tier is retired, on request, along with hermes3:8b. `vision`
+routes to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash` now -- natively
+multimodal, and the same route this slot used before local-vl ever existed. No
+second local service, no build-floor check, nothing for `hermes-verify.ps1` to
+fail on port 8080 anymore (that check is gone too).

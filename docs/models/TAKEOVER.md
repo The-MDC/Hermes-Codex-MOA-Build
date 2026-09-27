@@ -8,45 +8,31 @@ follow the steps below.
 
 ## Division of labour
 
-Three actors, not two — because the local runner cannot run the steps that install
-the local runner, and every earlier version of this table left that unsaid.
+**RETIRED to two actors, 2026-09-25.** This table used to name three: a human/Claude
+for bootstrap, a local VL model as a screenshot-reading "runner" for steps 1.3
+onward, and Claude Sonnet for escalations. The VL runner's whole tier —
+`nemotron-nano-12b-v2-vl` on `llama-server` :8080 — is retired along with
+`hermes3:8b`, on request ("remove hermes 8B and the 12b"). There is no local
+vision model left to hand step-execution to. What follows is what the old
+section explained about *why* that role existed and what replaced it; the
+actual steps below (Phase 1 onward) are now run by a human or Claude directly,
+same as Phase 0.
 
 | Actor | Available | Does | Does not |
 |---|---|---|---|
-| **A human, or Claude** | from the start | Phases 0 through step 1.3, before any local model exists. Installs Ollama, pulls `hermes3:8b`, installs llama.cpp, stands up `llama-server`. | Skip step 1.4 because "the model is there". |
-| **`nemotron-nano-12b-v2-vl`** (local, llama-server :8080) — the **VL runner** below and in the escalation table | **step 1.3 onward** | Runs the numbered steps. Compares command output **and screenshots** against the stated success line, and reports which step failed. | Decide anything. Edit config by hand. Improvise a fix. Execute commands — see below. |
-| **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | Skip the verify gate because a step "looks fine". |
+| **A human, or Claude** | from the start | Every phase, start to finish — Ollama, the floor model pull, all verification. | Skip the verify gate because a step "looks fine". |
+| **Claude Sonnet** | from the start | Every ESCALATE row. Diagnoses failures, writes config changes, decides trade-offs. | — |
 
-**Why a vision model runs this runbook.** The loop below is "compare the output to
-the stated success line", and on a Windows bring-up much of that output is not text.
-`winget`'s installer dialogs, the VS Code terminal dropdown that must read
-*PowerShell* rather than Command Prompt, the `ollama list` table, an error popup,
-the Cloudflare and Render dashboard pages — a text-only runner sees none of it,
-because none of it arrives on stdout. Several success lines in this file describe
-exactly those things. Hand the VL model a screenshot and it can check them.
+**Why a vision model used to run this runbook**, kept for context: the loop is
+"compare the output to the stated success line", and on a Windows bring-up much
+of that output is not text — installer dialogs, the VS Code terminal dropdown,
+dashboard pages. A text-only runner sees none of that, since it never hits
+stdout. That reasoning is sound; it just no longer has a model to attach to
+here, since the tier it depended on is gone.
 
-**It reads and reports; it does not execute — until step 1.4 says otherwise.** This
-model was imported from a bare GGUF with no `TEMPLATE` directive, so its tool-calling
-convention is unverified, and a wrong template degrades tool use while ordinary chat
-looks perfect. Commands stay in the shell a human or the harness drives.
-
-**Step 1.4 is the gate that lifts this.** It runs two probes against :8080 — one that
-the model genuinely sees an image, one that it emits real `tool_calls` — and its
-outcome table says which of the three roles this runner may actually hold. Do not
-promote it to driving execution on the strength of ordinary chat looking fine; that
-is exactly what a wrong template hides. (The quickstart covers Ollama's `hermes3:8b` on :11434 only; it does
-not probe this model at all.)
-
-**The availability column is load-bearing.** `nemotron-nano-12b-v2-vl` is served by
-`llama-server` on `127.0.0.1:8080`, and step 1.3 is what starts it. Before that it
-has no backend, so it cannot be the thing checking step 1.3's own success line.
-The same was quietly true of the model this table used to name — imported at step
-1.4 — which is how a runbook ends up implying a model runs the steps that create it.
-
-**The one rule that matters:** a step is done when its success line matches. Not
-when the command exits 0, not when the output looks plausible. A wrong chat
-template still chats. A dangling model reference still answers — on the wrong
-model.
+**The one rule that matters, unchanged:** a step is done when its success line
+matches. Not when the command exits 0, not when the output looks plausible. A
+dangling model reference still answers — on the wrong model.
 
 ## Stop conditions
 
@@ -83,9 +69,9 @@ Save the output. You will compare against it at step 6.1.
 
 ## Phase 1 — local models
 
-The local tier backs the floor plus five auxiliary slots, and the VL runner backs
-vision plus all heavy local text. Nothing else works predictably until Ollama holds
-`hermes3:8b` and `llama-server` is answering on :8080.
+The local tier backs the floor plus five auxiliary slots. Nothing else works
+predictably until Ollama holds it. (There is no second local tier anymore —
+`vision` routes to the cloud; see Step 1.3 below for why.)
 
 ### Step 1.1 — Confirm Ollama is serving
 
@@ -96,249 +82,45 @@ ollama list
 **Success:** a table prints, even if empty.
 **If `ollama` is not recognised:** install Ollama, reopen the shell, retry once.
 
-### Step 1.2 — Pull the support model
+### Step 1.2 — Pull the floor model
 
 ```powershell
-ollama pull hermes3:8b
+ollama pull hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
 ```
 
-**Success:** `ollama list` now shows `hermes3:8b`.
+**Success:** `ollama list` now shows the full tag above (swapped from
+`hermes3:8b` 2026-09-25, on request). ~3.4 GB, verified live against the
+Hugging Face repo (3,421,895,840 bytes). Needs a reasonably current Ollama —
+the `hf.co/` direct-pull feature; check `ollama --version` if the pull is
+rejected. Note it is an "abliterated" (refusal-removed) fine-tune, a real
+behavior change from hermes3:8b, not just a smaller download — it now backs
+every local-routed auxiliary slot, `approval` included.
 
-### Step 1.3 — Local vision AND heavy local text: llama.cpp, NOT Ollama
+### Step 1.3 — RETIRED 2026-09-25 · was "Local vision AND heavy local text"
 
-**Use llama.cpp, not Ollama.** A VL GGUF ships as two files — the language model and
-a separate `mmproj` projector — and importing both through an Ollama Modelfile has a
-documented history of failing **silently**.
+This step, and Step 1.4 below, downloaded and served `nemotron-nano-12b-v2-vl`
+via a second local server (`local-vl`, llama.cpp on :8080) — the VL runner the
+old Division of Labour section described. That tier is gone from
+`config.yaml` entirely, on request ("remove hermes 8B and the 12b").
 
-In [ollama#9967](https://github.com/ollama/ollama/issues/9967) (Gemma3, Mar 2025,
-closed) the projector is named with a second `FROM`, `ollama show` **displays it**, and
-image input still errors `this model is missing data required for image input`. That is
-the failure mode that matters: create succeeds, vision is gone — the same silent
-capability loss `vision: auto` already caused once in this build.
+`vision` now routes to the cloud: `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`,
+the same route it used before this tier ever existed and the one-line revert
+this file always documented as the alternative to running a second local
+service. Nothing to download, build, or serve here anymore.
 
-**Stated at its real strength, because the citations are narrower than "cannot".**
-[ollama#14730](https://github.com/ollama/ollama/issues/14730) is `qwen35moe`, closed as
-a duplicate and root-caused to that architecture's clip runner; there both two `FROM`
-lines and `ADAPTER` failed. Neither issue proves Ollama can *never* do this, and neither
-says anything about `nemotron_v2_vl`. What they establish is a real risk of silent
-capability loss on exactly this path.
+The reasoning this step used to carry — why Ollama can't be trusted with a
+VL GGUF's separate `mmproj` projector, the exact llama.cpp build floor and the
+two PRs (`#19547`, `#23638`) a working build needed — is preserved in
+`configs/hermes/config.yaml`'s git history if a local vision tier is ever
+rebuilt. It no longer describes anything this file asks you to do. Skip to
+Phase 2.
 
-llama.cpp is chosen because it is **positively verified** rather than merely
-not-disproven: `llama-server` takes `--mmproj`, and `nemotron_v2_vl` support is in
-llama.cpp PR #19547 by name.
+### Step 1.4 — RETIRED 2026-09-25 · was "Prove the VL model SEES and CALLS TOOLS"
 
-Download both files (≈10.5 GB total):
-
-```powershell
-hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
-  --include '*Q5_K_M*.gguf' '*mmproj*.gguf' `
-  --local-dir "$HOME\Models\nemotron-nano-12b-v2-vl"
-```
-
-**Success:** two files — `...VL-Q5_K_M.gguf` at about **8.77 GB** and
-`...VL-BF16-mmproj.gguf` at about **1.69 GB**. The projector is not quantized and
-there is only one; if you have only the first file, vision will not work.
-
-#### Get llama.cpp
-
-**Take a build from mid-2026 or later.** Current nightlies are around **b11118**
-(checked 2026-09-23) and carry everything needed.
-
-> **This floor was wrong until 2026-09-23.** It read "b6315 or later, that is where
-> `nemotron_h` became supported". True — of a different model. `nemotronh` is the
-> **text** Nemotron Nano v2's hybrid mamba2/attention arch, llama.cpp PR **#15507**,
-> merged 2025-08-29, which is what b6315 dates to. It was researched when the text
-> model held this slot and carried over unchanged when the slot became the VL model.
->
-> This model is **`nemotron_v2_vl`**, and it needs two PRs:
->
-> | PR | What | Merged |
-> |---|---|---|
-> | **#19547** | Add Nemotron Nano 12B v2 VL support | 2026-02-12 |
-> | **#23638** | `mtmd`: dynamic hi-res tiling for `nemotron_v2_vl` | ~2026-05-25 |
->
-> **#23638 is not optional here.** Without it the projector encodes every image at a
-> fixed 256 tokens regardless of resolution, and `--image-min-tokens` /
-> `--image-max-tokens` are silently ignored (issue **#25317**, which calls the result
-> "effectively unusable" for document images). This tier exists to read installer
-> dialogs and terminal output from screenshots. A build missing #19547 refuses to
-> load — the good failure. One missing #23638 loads, sees, and reads them badly.
-
-Releases are at <https://github.com/ggml-org/llama.cpp/releases>. Take a `b#####` tag,
-**not** a `v0.4.x` one — the `v` releases carry no Windows binaries. Pick one zip:
-
-| Asset | When |
-|---|---|
-| `llama-b#####-bin-win-cuda-12.4-x64.zip` | NVIDIA GPU, driver for CUDA 12.x |
-| `llama-b#####-bin-win-cuda-13.4-x64.zip` | NVIDIA GPU, newer driver |
-| `llama-b#####-bin-win-cpu-x64.zip` | no NVIDIA GPU, or unsure |
-| `llama-b#####-bin-win-cpu-arm64.zip` | Snapdragon X / ARM laptop |
-
-**A CUDA build also needs its runtime.** Download the matching
-`cudart-llama-bin-win-cuda-<same-version>-x64.zip` and unzip it **into the same
-folder**. Without it `llama-server.exe` exits immediately on a missing DLL, and the
-error does not mention CUDA.
-
-```powershell
-$dest = "$HOME\llama.cpp"
-New-Item -ItemType Directory -Path $dest -Force | Out-Null
-# unzip BOTH archives into $dest, then:
-$env:PATH = "$dest;$env:PATH"
-llama-server --version
-```
-
-**Success:** a version line carrying a `b#####` number ≥ 6315.
-
-#### Serve it
-
-```powershell
-$m = "$HOME\Models\nemotron-nano-12b-v2-vl"
-llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
-             --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
-             --alias nemotron-nano-12b-v2-vl `
-             --host 127.0.0.1 --port 8080 `
-             -c 16384 -ngl 99 --jinja
-```
-
-Four of those decide whether this works on a laptop:
-
-- **`--alias` is load-bearing.** Without it llama-server names the model after its
-  file path, `config.yaml`'s `local-vl.default_model` stops matching, and
-  `hermes-verify.ps1` reports an id mismatch that reads like a wrong model.
-- **`-c 16384`** matches `local-vl.context_length` in `config.yaml`. Leave it off and
-  llama-server allocates the model's native window; the KV cache, not the weights, is
-  what exhausts a 16 GB laptop. Raise both numbers together or neither.
-- **`-ngl 99`** offloads every layer it can to the GPU. A CPU-only build ignores it,
-  so it is safe to leave in. Lower it toward `-ngl 20` if VRAM is the limit — the
-  model still runs, just slower.
-- **`--jinja`** uses the model's own chat template. Step 1.4's tool-call probe fails
-  without it, and it fails as *prose about calling a tool* rather than as an error.
-
-**`--host 127.0.0.1` is deliberate.** The server takes no key — `local-vl.api_key` is
-the literal placeholder `"no-key-required"` — so binding `0.0.0.0` would put an
-unauthenticated model endpoint on the local network. If it genuinely has to leave the
-box, put a reverse proxy in front and add auth there.
-
-**Success:**
-
-```powershell
-(Invoke-RestMethod http://127.0.0.1:8080/v1/models).data.id
-```
-
-prints exactly `nemotron-nano-12b-v2-vl`.
-
-#### Keep it running
-
-The `vision` slot and all heavy local text route here, so a stopped server is a
-missing capability — `hermes-verify.ps1` FAILs on port 8080 for that reason. A
-terminal window someone can close is not a deployment. Pick one:
-
-1. **Windows service via NSSM** — survives logout and reboot, restarts on crash.
-   `nssm install llama-vl "$HOME\llama.cpp\llama-server.exe"`, set the arguments and
-   startup directory, then `nssm start llama-vl`. Use this before relying on the tier,
-   and definitely before handing the machine off.
-2. **Scheduled Task at log on** — `schtasks /create /tn llama-vl /sc onlogon /rl
-   highest /tr "...\llama-server.exe <args>"`. No extra software; does not survive a
-   logged-out reboot.
-3. **A pinned terminal** — what the bare command above gives you. Fine while bringing
-   the stack up, wrong for anything after.
-4. **Docker** with `--restart unless-stopped`. Clean lifecycle, but GPU passthrough on
-   Windows adds a layer and the model files have to be mounted in.
-
-Start at 3 to prove it works, then move to 1.
-
-**If you would rather not run a second local service,** revert `vision` in
-`config.yaml` to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`. That model
-is natively multimodal and is what fixed the slot originally. One line, no loss
-except offline capability.
-
-### Step 1.4 — Prove the VL model SEES and CALLS TOOLS
-
-Two probes, and they answer two different questions. Run both.
-
-The division-of-labour table scopes the VL runner to **read, compare and report** —
-not to execute commands — precisely because its tool calling is unproven. This step
-is what lifts that restriction, or confirms it should stay.
-
-**Probe 1 — does it actually see?** The whole reason for this tier. A VL model served
-without its projector loads fine and answers about images from the text alone.
-
-```powershell
-Add-Type -AssemblyName System.Drawing
-$bmp = New-Object System.Drawing.Bitmap 64,64
-$g = [System.Drawing.Graphics]::FromImage($bmp)
-$g.Clear([System.Drawing.Color]::White)
-$g.FillEllipse([System.Drawing.Brushes]::Red, 8, 8, 48, 48)
-$g.Dispose()
-$ms = New-Object System.IO.MemoryStream
-$bmp.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png)
-$b64 = [Convert]::ToBase64String($ms.ToArray())
-$bmp.Dispose(); $ms.Dispose()
-
-$body = @{
-  model = 'nemotron-nano-12b-v2-vl'
-  messages = @(@{
-    role = 'user'
-    content = @(
-      @{ type='text'; text='What colour is the shape? Answer with one word.' },
-      @{ type='image_url'; image_url=@{ url="data:image/png;base64,$b64" } }
-    )
-  })
-  max_tokens = 10
-} | ConvertTo-Json -Depth 12
-
-(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
-  -ContentType 'application/json' -Body $body).choices[0].message.content
-```
-
-**Success:** the reply says **red**.
-
-**Failure looks like** a refusal, a description of something that is not there, or a
-guess like "blue" — all of which mean the projector is not attached. Restart
-`llama-server` and confirm `--mmproj` is on the command line and points at the
-`...mmproj.gguf` file, not at the model. This is the failure that `ollama create`
-produces silently, and it is why this tier is not an Ollama tag.
-
-**Probe 2 — does it emit real `tool_calls`?**
-
-```powershell
-$body = @{
-  model = 'nemotron-nano-12b-v2-vl'
-  messages = @(@{ role='user'; content='What is the weather in Denver? Use the tool.' })
-  tools = @(@{
-    type = 'function'
-    function = @{
-      name = 'get_weather'
-      description = 'Get current weather for a city'
-      parameters = @{
-        type = 'object'
-        properties = @{ city = @{ type='string' } }
-        required = @('city')
-      }
-    }
-  })
-} | ConvertTo-Json -Depth 10
-
-(Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8080/v1/chat/completions' `
-  -ContentType 'application/json' -Body $body).choices[0].message | ConvertTo-Json -Depth 10
-```
-
-**Success:** a `tool_calls` array naming `get_weather`.
-
-**Failure looks like** prose about the weather, or prose *describing* the tool it
-would call. Both mean the chat template is wrong — the GGUF was imported with no
-`TEMPLATE` directive, so whatever the file embeds is what you get.
-
-**What each outcome means for the role:**
-
-| Probe 1 | Probe 2 | The VL runner |
-|---|---|---|
-| red | `tool_calls` | Can read, compare, report **and drive execution**. Lift the restriction |
-| red | prose | Reads and reports only, as the table already says. Usable — this is the expected case until a template is fixed |
-| wrong | either | **Not usable for vision at all.** `--mmproj` is missing or wrong; fix that before anything else |
-
-**ESCALATE** on a probe-1 failure. A template fix for probe 2 is a judgment call and
-also escalates, but the build is still usable meanwhile.
+Retired along with Step 1.3 above — there is no local vision model left to
+probe. `vision`'s cloud route (DeepSeek-V4.1-Flash) is natively multimodal and
+was verified as this slot's fix before the VL tier ever existed; nothing new
+to prove here.
 
 ---
 
@@ -658,9 +440,10 @@ falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
 hermes --print "Delegate to a subagent: have it reply with exactly subagent-ok"
 ```
 
-**Success:** `subagent-ok`. Subagents must run on `nvidia/nemotron-3-super-120b-a12b`,
-a different provider from the parent. Same provider on both means the split
-collapsed and the parent's bucket is being spent twice.
+**Success:** `subagent-ok`. Subagents must run on `nvidia/llama-3.3-nemotron-super-49b-v1.5`
+(swapped from `nemotron-3-super-120b-a12b` 2026-09-25), a different provider from
+the parent. Same provider on both means the split collapsed and the parent's
+bucket is being spent twice.
 
 ### Step 5.3 — Tool call through Hermes
 
@@ -674,7 +457,7 @@ Crawl4AI rather than the model.
 ### Step 5.4 — Local floor
 
 ```powershell
-hermes --print --model custom:local:hermes3:8b "Reply with exactly: floor-ok"
+hermes --print --model custom:local:hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0 "Reply with exactly: floor-ok"
 ```
 
 **Success:** `floor-ok`, served with no network dependency.
@@ -743,9 +526,9 @@ divergence went unrecorded for three days and cost a session to rediscover.
 |---|---|---|
 | Model answers but ignores tools | Sonnet | Wrong chat template — fix the Modelfile `TEMPLATE` |
 | Parent resolves to the wrong model | Sonnet | NOT router coverage — the HF router is confirmed to serve V4-Pro via 4 live providers. Check `HF_TOKEN`, `discover_models`, and the returned-vs-requested id from `-Deep` |
-| `hermes mcp list` missing an entry | VL runner | Re-run step 3.2, restart gateway, re-check once |
-| `ModuleNotFoundError: mcp.server.fastmcp` | VL runner | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
+| `hermes mcp list` missing an entry | A human, or Claude | Re-run step 3.2, restart gateway, re-check once |
+| `ModuleNotFoundError: mcp.server.fastmcp` | A human, or Claude | NOT a package fault — the supervisor substituted its Python. Check `HERMES_COUNCIL_PYTHON`, not pip |
 | `codex mcp list` says `Unsupported` | **Nobody** | Expected and unfixable — the interface was removed upstream. Delegation is the subprocess path; prove it at step 5.5 |
 | A fallback/aux slot 404s on OpenRouter | Sonnet | OpenRouter ids are lowercase `deepseek/...`, not the Hugging Face `deepseek-ai/DeepSeek-...` form. Same model, different namespace |
 | Any key visible outside `.env` | **Human** | Rotate it first, then continue |
-| Ollama tag not found | VL runner | Tag string must match `config.yaml` exactly; re-run step 1.4 |
+| Ollama tag not found | A human, or Claude | Tag string must match `config.yaml` exactly; re-run step 1.2 |

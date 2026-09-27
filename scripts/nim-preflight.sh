@@ -47,7 +47,7 @@ bad()  { printf '  %sFAIL%s  %s\n' "$RED" "$RST" "$*"; FAILED=$((FAILED+1)); }
 hdr()  { [ "$QUIET" = 1 ] || printf '\n%s%s%s\n' "$DIM" "$*" "$RST"; }
 
 NIM_BASE="${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
-NIM_MODEL="${NVIDIA_NIM_MODEL:-nvidia/nemotron-3-super-120b-a12b}"
+NIM_MODEL="${NVIDIA_NIM_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
 HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
 LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:11434/v1}"
@@ -320,7 +320,7 @@ for m in d[:4]: print("serving:", m.get("id", "?"))' "$TMP/local.json" 2>/dev/nu
         fi
     else
         warn "local server not reachable (HTTP $CODE) — no offline floor"
-        printf '        Start one:  ollama serve      then: ollama pull hermes3:8b\n'
+        printf '        Start one:  ollama serve      then: ollama pull hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0\n'
         printf '        See docs/models/TAKEOVER.md phase A. Everything else still works.\n'
     fi
 

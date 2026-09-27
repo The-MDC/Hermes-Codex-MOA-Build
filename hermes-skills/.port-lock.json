@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "generated": "2026-09-23",
+  "generated": "2026-09-25",
   "note": "Written by scripts/port-skills-to-hermes.js. `sha256` is of the UPSTREAM SKILL.md at port time, which is what `--check` re-hashes to report drift. Entries are MERGED, not replaced: source roots differ per machine, and a port run on a box that lacks one source must not erase that skill's record. Only the source ROOT is recorded, not the resolved path: under .claude/skills/synced the path carries an opaque per-install sync id, which would churn this file on every machine and put an account identifier in version control. --check re-resolves by name and prints the real path it found.",
   "skills": {
     "agentic-gateway": {
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "8d12162202c91db328d1bb4a0c9a301ffdb718ad1b6e5dcb5e31b9fdfc82e7af",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -16,7 +16,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "fbd25756f96688c20d73c686208d74f1a6dc03c6137b08241db33d1a63f7fe40",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -25,7 +25,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "6688fc81bb2051d3f234385b50ce160834eb0b0510ed8a5816cc412c1d28c352",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -34,7 +34,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "afbefee7bae05737fc01465ab8d3d12b9ab9008117964b3042f302ab1dcd7980",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -44,7 +44,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "da33467b43f25cfc5e2e9138ceb1846e118bb93bbe7e7cddb1f1f8b940c42f43",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -54,7 +54,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "1120b3769e2985cefb3d25be981b1f914abeba57ae079b83c20c666c164fa9fe",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -63,7 +63,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "7bebc4a2cf108c55c1e52bb96b1050dc1ab2f9492e9c2d43f1fe57f826728f4d",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -72,7 +72,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "46ae8d5a0b95efad0329ac287ea5248c19fbbe195d8270231c4a78ba6217c024",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -82,7 +82,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "2e47d78846faeea4a56e9809c52700087a15a2155a3f293a3efbaded81398ef4",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -91,7 +91,7 @@
       "source": "ported",
       "upstream_root": "/mnt/skills/public",
       "sha256": "01ccda8f3014a3199e9668cd862391db5c41500f1821e60f013812dedf4dec88",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -100,7 +100,7 @@
       "source": "ported",
       "upstream_root": "/mnt/skills/public",
       "sha256": "d91970639e9f5c37682ac7ab60094d35f1c7c1f38d731bd56396563aee10c1d3",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -108,8 +108,8 @@
     "hermes-orchestration": {
       "source": "hand-written",
       "upstream": "hermes-skills/operations/hermes-orchestration/SKILL.md",
-      "sha256": "8f94920a04c7c541804207d823ea24dc51d35fcfcc44b68dbb9742a1f73321d6",
-      "ported": "2026-09-23",
+      "sha256": "aac7abc51df9b5ddaae6ec3c7ce08eccfbb34212c9f2a08ecbdf89a11735a737",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -119,7 +119,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "067b7587a344a928fc6534ef66b1bcd591fc7c26d207ea7ca3334aeb678d6475",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -128,7 +128,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "8af64af2c6872d89c91f040b93ea93efbd30c8081da4f9157c594a4a4ff3c4d7",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -138,7 +138,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "8094736890e925902c3c5d83d2740255edc42f1fcce6863eeb3a59c7e94b4e09",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -148,7 +148,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "dd79b135afec2994f53065805d6dbca70b5c7175109a656503416c62f2da1201",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -157,7 +157,7 @@
       "source": "hand-written",
       "upstream": "hermes-skills/operations/local-desktop/SKILL.md",
       "sha256": "e1db46015f8437716bb4397607823caee12eaffdaa34ab47c48f3537aab9a137",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -167,7 +167,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "87b49269c113f683827854e440461a3e15380b784173638055ccc983d10a28ac",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -177,7 +177,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "0f4592dcb53cf2b5d6b7febee6b4152018b565551a1c29e3c612f57b218ab295",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -186,7 +186,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "6a09dadeca884054e5241af2bdda85e51c045ae031dd4c0047c61cfd75831173",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -196,7 +196,7 @@
       "source": "ported",
       "upstream_root": "/mnt/skills/public",
       "sha256": "e2081f071b4f56fb0fd994dad13c3b7b1dc35d7f3655707ae38ccaf230b787b6",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -205,7 +205,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "e96070a9ffd8a5691f7fcc2c10946c35090c3f904e627eec4846cd66ee73960f",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
@@ -215,7 +215,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "42765c880e446a83c85f7852fc77b43ecd46c76ca219d68051799ac7425e6943",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -224,7 +224,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "a04500093b77eb20abbc1e64db163d2e82bd631f855f585e03e1be9ee3955f51",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -233,7 +233,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "c761e424ad6088b21a5ce7e36c8b0581e36ba327575c0873488749abcdeef471",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -242,7 +242,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "3316035b9ec561bc183ff0802bef6f070371e6f80864ed9c767ad51fa5e05987",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "hermes"
       ]
@@ -251,7 +251,7 @@
       "source": "ported",
       "upstream_root": "/root/.claude/skills/synced",
       "sha256": "c3d16b2a5c30d0e71822a52286f683bfd39f0779da173b2c0b4f50c00577a790",
-      "ported": "2026-09-23",
+      "ported": "2026-09-25",
       "surfaces": [
         "claude",
         "hermes"
