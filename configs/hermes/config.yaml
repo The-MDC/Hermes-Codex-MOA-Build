@@ -756,28 +756,35 @@ auxiliary:
   web_extract:
     provider: "custom:or-fallback"
     model: deepseek/deepseek-v4.1-flash
-  # VISION: REVERTED TO CLOUD 2026-09-25, when `local-vl` (nemotron-nano-12b-v2-vl
-  # on llama.cpp :8080) was removed entirely as part of the hermes3:8b -> single
-  # 3B swap. This is the SAME one-line revert this file has documented since the
-  # local VL tier was added -- it just got exercised.
+  # VISION: MOVED TO NVIDIA NIM 2026-09-27, on request -- a purpose-built
+  # vision-language model on the SAME provider/key subagents and fallback 1
+  # already use, rather than DeepSeek-V4.1-Flash doing vision as a side
+  # capability. nvidia/ising-calibration-1.5-31b is an NVIDIA-authored
+  # image-text-to-text model; its NIM API example (integrate.api.nvidia.com,
+  # OpenAI-style `messages[].content` with `image_url` + `text` blocks) was
+  # pulled directly from its build.nvidia.com product page, not fabricated --
+  # but like the 49B id above, build.nvidia.com is egress-blocked from this
+  # sandbox, so it was NOT live-tested from here. Self-verify before trusting:
+  #     bash scripts/nim-preflight.sh --list | grep -i ising-calibration
   #
-  # HISTORY, KEPT because the reasoning still explains why `auto` is not an
-  # option: this slot was left on `auto` back when the parent was Kimi-K3, which
-  # had vision. The parent became DeepSeek-V4-Pro, text-generation only -- no
-  # image path at all -- and `auto` silently resolved image work to a model that
+  # HISTORY, kept because the reasoning still applies to any future vision
+  # choice here: this slot was on `auto` back when the parent was Kimi-K3
+  # (which had vision). The parent became DeepSeek-V4-Pro, text-only -- no
+  # image path -- and `auto` silently resolved image work to a model that
   # could not see, reported as a bad answer rather than a missing capability.
-  # Left on `auto` again, the same bug returns for a different reason: the new
-  # local default, Llama-3.2-3B, is ALSO text-only (Llama 3.2's vision variants
-  # are the 11B/90B line). So this is pinned explicitly, not left to infer.
+  # The local floor model is ALSO text-only (Llama 3.2's vision variants are
+  # the 11B/90B line, not the 3B this repo runs). So this stays pinned
+  # explicitly, never `auto`.
   #
-  # DeepSeek-V4.1-Flash is natively multimodal (pipeline tag image-text-to-text).
-  # What this trade buys back: no llama-server dependency, no second local
-  # service, no build-floor requirement. What it costs, same as before the VL
-  # tier existed: vision now fails the way the other three cloud tiers do, on no
-  # network, where the local-VL era survived that.
+  # Before this: DeepSeek-V4.1-Flash on `custom:or-fallback` (2026-09-25 -
+  # 2026-09-27), itself a revert from the retired `local-vl` tier
+  # (nemotron-nano-12b-v2-vl on llama.cpp :8080). Both this and that one are
+  # cloud-only -- moving providers does not reintroduce the offline capability
+  # local-VL had; vision still fails the way the other cloud tiers do, on no
+  # network.
   vision:
-    provider: "custom:or-fallback"
-    model: deepseek/deepseek-v4.1-flash
+    provider: "custom:nvidia-nim"
+    model: nvidia/ising-calibration-1.5-31b
   title_generation:
     provider: "custom:local"
     model: hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
