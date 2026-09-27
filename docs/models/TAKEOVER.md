@@ -440,10 +440,11 @@ falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
 hermes --print "Delegate to a subagent: have it reply with exactly subagent-ok"
 ```
 
-**Success:** `subagent-ok`. Subagents must run on `nvidia/llama-3.3-nemotron-super-49b-v1.5`
-(swapped from `nemotron-3-super-120b-a12b` 2026-09-25), a different provider from
-the parent. Same provider on both means the split collapsed and the parent's
-bucket is being spent twice.
+**Success:** `subagent-ok`. Subagents must run on `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
+(swapped 2026-09-27 from `nvidia/llama-3.3-nemotron-super-49b-v1.5` — confirmed
+dead, HTTP 410, EOL 2026-08-26 — itself swapped from `nemotron-3-super-120b-a12b`
+2026-09-25), a different provider from the parent. Same provider on both means the
+split collapsed and the parent's bucket is being spent twice.
 
 ### Step 5.3 — Tool call through Hermes
 

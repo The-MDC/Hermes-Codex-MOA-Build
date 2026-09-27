@@ -16,18 +16,20 @@ but not the floor.
 | Tier | Provider | Model | Role |
 |---|---|---|---|
 | parent | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | 1.6T (49B active), 1M ctx |
-| subagents | `custom:nvidia-nim` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | high-compute delegation |
+| subagents | `custom:nvidia-nim` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | high-compute delegation |
 | fallback | `custom:or-fallback` | `deepseek/deepseek-v4.1-flash` | 429 escape, 2 heavy aux slots |
 | floor | `custom:local` | `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (Ollama) | offline, 5 auxiliary slots |
 
-The `fallback` row compresses an ordered chain in `fallback_providers:`. As of
-2026-09-25 it is two cloud links deep before the local last resort: **1)**
-`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, reusing
-the `nvidia-nim` bucket subagents already spend — a fallback there now competes
-with delegation traffic), **2)** the DeepSeek entry the table shows above, **3)**
-the local floor model, unchanged in role. That NIM model id was corroborated by
-three independent resellers, not verified first-party — `config.yaml`'s comment
-on the entry has the detail and the self-verify command.
+The `fallback` row compresses an ordered chain in `fallback_providers:`, two
+cloud links deep before the local last resort: **1)**
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on NVIDIA NIM (cloud-hosted,
+reusing the `nvidia-nim` bucket subagents already spend — a fallback there now
+competes with delegation traffic), **2)** the DeepSeek entry the table shows
+above, **3)** the local floor model, unchanged in role. This id replaced
+`nvidia/llama-3.3-nemotron-super-49b-v1.5` on 2026-09-27 after that one turned
+out to be dead (HTTP 410, end-of-life 2026-08-26) — the "corroborated by three
+resellers" verification this section used to cite was wrong; `config.yaml`'s
+comment on the entry has the full story and the self-verify command.
 
 **There is no `vision + heavy local` tier anymore.** `local-vl`
 (nemotron-nano-12b-v2-vl on llama.cpp :8080) is removed as of 2026-09-25, on

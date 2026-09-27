@@ -14,7 +14,7 @@ content, and the port fails if one survives into the output tree.
 
 ```
 parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
-subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5  high-compute delegation
+subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
 floor       custom:local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)   offline, 5 aux slots
 ```
@@ -33,22 +33,25 @@ wired into none of the five roles above — reachable only via
 on the MoA `aggregator:` block for why it was kept out.
 
 `fallback_providers:` is an ordered chain, not a single role — the table's one
-`fallback` row is now two links deep. As of 2026-09-25: **fallback 1** is
-`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, same
+`fallback` row is now two links deep. **Fallback 1** is
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on NVIDIA NIM (cloud-hosted, same
 bucket `nvidia-nim` already spends on subagents — a fallback firing there now
 competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
 still shows; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
-remains last resort, unchanged in role. That NIM model id was NOT live-verified
-from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com are both
-egress-blocked there) — see the comment on the entry itself in `config.yaml` for
-the triangulation and the exact command to self-verify it.
+remains last resort, unchanged in role.
 
-**Nemotron-3-Super-120B-A12B is retired from this file, on request (2026-09-25).**
-The `nvidia-nim` provider's `default_model`, `delegation:`, and the MoA
-`aggregator:` all now point at the same 49B model as the fallback entry above —
-subagents and fallback 1 are no longer diversified by model size, only by which
-failure each answers (the parent going down, vs. delegation routing). No
-reference to the 120B model remains anywhere in `config.yaml`.
+**The id above is a 2026-09-27 replacement for a dead model, not the original
+choice.** `nvidia/llama-3.3-nemotron-super-49b-v1.5` (added 2026-09-25, replacing
+Nemotron-3-Super-120B-A12B) was never live-verified from this sandbox — this
+repo's own egress proxy blocks `build.nvidia.com`/`docs.api.nvidia.com` — and was
+instead "triangulated" against three NIM resellers. That triangulation was wrong:
+a real Hermes session on this NIM account hit the id live via `/moa` and got back
+HTTP 410 Gone, end-of-life 2026-08-26 — a month before the triangulation was
+trusted. The replacement was live-verified the way that matters: it actually
+answered, on this account, the same day it replaced the dead id. See the comment
+on the `nvidia-nim` provider entry in `config.yaml` for the full story, and run
+`bash scripts/nim-preflight.sh --list | grep -i nemotron` after any future swap
+here — that command would have caught this immediately.
 
 Three rules that have each cost a session here:
 

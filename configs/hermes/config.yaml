@@ -117,32 +117,43 @@ providers:
     api: https://integrate.api.nvidia.com/v1
     key_env: NVIDIA_API_KEY
     transport: chat_completions
-    # SWAPPED 2026-09-25, on request: "we moved to the 49 billion Nemotron,
-    # remove the 120 billion." Nemotron-3-Super-120B-A12B is gone from this file
-    # entirely as of this change -- it no longer serves subagents/delegation or
-    # the MoA aggregator (both updated below), and nothing here references it.
+    # SWAPPED 2026-09-27, on discovery: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    # (added 2026-09-25 to replace Nemotron-3-Super-120B-A12B) is DEAD. Not
+    # "unverified" -- a real Hermes session on this NIM account hit it live via
+    # `/moa` and got back HTTP 410 Gone: "The model
+    # 'nvidia/llama-3.3-nemotron-super-49b-v1.5' has reached its end of life on
+    # 2026-08-26T09:00:00Z and is no longer available." It had been dead for a
+    # month before this file's own "triangulated against three resellers"
+    # comment was written -- the triangulation was wrong, and the self-verify
+    # command this comment used to point at (nim-preflight.sh --list) would have
+    # caught this immediately if it had ever been run. Run it after every
+    # NVIDIA model swap from now on, not just when something looks wrong:
+    #     bash scripts/nim-preflight.sh --list | grep -i nemotron
     #
-    # The 2026-09-22 "verified against the live endpoint" claim that used to sit
-    # here was true of the 120B id and does NOT carry over to this one. This id,
-    # nvidia/llama-3.3-nemotron-super-49b-v1.5, was NOT live-verified from this
-    # sandbox -- build.nvidia.com and docs.api.nvidia.com are both blocked by
-    # this environment's egress proxy. It is triangulated against three
-    # independent NIM resellers instead (Puter, WaveSpeedAI, AIMLAPI), all
-    # showing the identical string -- see fallback_providers[0] below, which
-    # carries the full writeup for the same id. Confirm for real before
-    # trusting either use of it:
-    #     bash scripts/nim-preflight.sh --list | grep -i nemotron-super-49b
-    default_model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    # Replacement: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning. Live-verified
+    # THE HARD WAY -- not triangulated, actually answered -- in the same /moa
+    # fan-out that caught the 49B's death, on this account, 2026-09-27. It is a
+    # reasoning-tuned MoE (30B total, ~3B active per the "a3b" naming), smaller
+    # in ACTIVE compute than the dense 49B this replaces, but alive beats
+    # well-specified and dead. It was also already this account's own default
+    # model before this change, which is as strong a "this id works" signal as
+    # a NIM account can give without calling nim-preflight.sh directly.
+    #
+    # nvidia/nemotron-3.5-lightning-30b-a3b also answered live in the same
+    # fan-out (speed-optimized, not reasoning-tuned) -- a reasonable alternative
+    # if delegation/fallback latency matters more than reasoning depth here.
+    default_model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     models:
-      - nvidia/llama-3.3-nemotron-super-49b-v1.5
+      - nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     discover_models: false
     # nim-preflight.sh reports what the endpoint advertises. Set this to the number
     # it prints. The preflight now defaults to the model above; NVIDIA_NIM_MODEL
     # overrides it if you need to probe a different one.
     #
-    # 128K per the model card ("The model supports a context length of 128K
-    # tokens"). Same figure as the 120B entry this replaced, so the number below
-    # is unchanged even though the model is not.
+    # CONTEXT LENGTH NOT RE-VERIFIED FOR THIS MODEL. 131072 carried over from the
+    # dead 49B's model-card figure, which is not guaranteed to match this MoE's
+    # actual window. Confirm via nim-preflight.sh or the model card before
+    # trusting long-context calls on this tier.
     context_length: 131072
 
   or-fallback:
@@ -337,18 +348,12 @@ fallback_providers:
   # download is UNCONNECTED to how this entry actually serves -- NIM
   # serves its own hosted build of the model; it does not take an uploaded GGUF.
   #
-  # MODEL ID NOT LIVE-VERIFIED FROM THIS REPO'S SANDBOX. build.nvidia.com and
-  # docs.api.nvidia.com are both blocked by this environment's egress proxy, so
-  # this could not be checked live the way the `nvidia-nim` provider's own entry
-  # above was (see its "Verified against the live endpoint" comment). The id
-  # below is corroborated by THREE independent resellers proxying NVIDIA's NIM
-  # catalog (Puter, WaveSpeedAI, AIMLAPI), all showing the identical string in
-  # their curl examples -- triangulated, not first-party. Confirm it for real
-  # before trusting this tier:
-  #     bash scripts/nim-preflight.sh --list | grep -i nemotron-super-49b
-  # nim-preflight's --list prints every model id this NVIDIA_API_KEY can reach,
-  # scoped to your account -- the same self-verification nim-preflight.sh already
-  # gives every other NIM id in this file, so no new tooling is needed for this.
+  # SWAPPED 2026-09-27: the previous id here, nvidia/llama-3.3-nemotron-super-49b-v1.5,
+  # is confirmed DEAD -- HTTP 410 Gone, end-of-life 2026-08-26T09:00:00Z, hit live
+  # by a real Hermes session on this account. See the `nvidia-nim` provider entry
+  # above for the full writeup and the replacement's live-verification story;
+  # this fallback now points at the same nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+  # id for the reason below.
   #
   # SAME BUCKET AS `nvidia-nim` ABOVE, ON PURPOSE OR NOT -- WORTH KNOWING EITHER
   # WAY. This entry reuses NVIDIA_API_KEY and build.nvidia.com, the identical
@@ -358,14 +363,12 @@ fallback_providers:
   # bucket nothing else touches. If that trade is unwanted, move this to its own
   # credential or accept that a bad subagent fan-out can starve this fallback too.
   #
-  # SAME MODEL AS `nvidia-nim` ABOVE, TOO, since the 120B->49B swap (2026-09-25) --
-  # not just the same bucket. A NIM outage now takes out subagent capacity AND
-  # this fallback link simultaneously; this entry still isn't pointless, since it
-  # answers a DIFFERENT failure (the parent, hf-router, going down) than
-  # delegation does, but the two roles no longer diversify away from each other
-  # the way they did when they ran different model sizes.
+  # SAME MODEL AS `nvidia-nim` ABOVE, TOO -- subagents and fallback 1 are not
+  # diversified from each other, only by which failure each answers (the parent,
+  # hf-router, going down, vs. delegation routing). Re-verify both together with
+  # nim-preflight.sh; they will drift or die together.
   - provider: custom
-    model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     base_url: https://integrate.api.nvidia.com/v1
     key_env: NVIDIA_API_KEY
   # FALLBACK 2 (was fallback 1 until the entry above was added 2026-09-25).
@@ -389,14 +392,17 @@ delegation:
   # either pasting a token into this file or having children authenticate as the
   # wrong account. Naming the provider resolves its key_env instead.
   #
-  # NIM is the children's bucket, not the parent's. Llama-3.3-Nemotron-Super-49B-v1.5
-  # is the high-compute tier (swapped from Nemotron-3-Super-120B-A12B 2026-09-25,
-  # on request): expensive reasoning and multi-agent decomposition, which is what
-  # delegation is for -- and the model card names exactly that ("post-trained for
-  # reasoning ... and agentic tasks, such as RAG and tool calling"), which the
-  # 120B entry this replaced was never specifically documented as.
+  # NIM is the children's bucket, not the parent's. Was Llama-3.3-Nemotron-Super-49B-v1.5
+  # (swapped from Nemotron-3-Super-120B-A12B 2026-09-25) -- that id is now confirmed
+  # DEAD, HTTP 410 as of 2026-08-26, caught live by a real Hermes session on this
+  # account; see the `nvidia-nim` provider entry above for the full story.
+  # Swapped 2026-09-27 to nvidia/nemotron-3-nano-omni-30b-a3b-reasoning, live-verified
+  # the same way -- reasoning-tuned, which is what delegation needs for multi-agent
+  # decomposition, even though it is a lower-active-compute MoE (~3B active of 30B
+  # total) than the dense 49B it replaces. Alive and reasoning-tuned beat
+  # well-specified and dead.
   provider: "custom:nvidia-nim"
-  model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+  model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
   max_concurrent_children: 3
   # Children have their own bucket already. A chain back to the parent's provider
   # would reintroduce exactly the drain this split exists to prevent.
@@ -443,8 +449,11 @@ moa:
     # If you want Claude as the aggregator, that is a one-line, deliberate edit
     # (provider: "custom:anthropic-direct", model: claude-sonnet-5) — not this
     # comment's job to make for you.
+    # Was nvidia/llama-3.3-nemotron-super-49b-v1.5 -- confirmed DEAD (HTTP 410,
+    # EOL 2026-08-26), swapped 2026-09-27 to the same live-verified replacement
+    # used for subagents/fallback 1 above.
     provider: "custom:nvidia-nim"
-    model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
   presets:
     default:
       reference_models:
@@ -496,7 +505,7 @@ web:
 #
 # Switching mid-session, with the names as they now stand:
 #   /model custom:hf-router:deepseek-ai/DeepSeek-V4-Pro
-#   /model custom:nvidia-nim:nvidia/llama-3.3-nemotron-super-49b-v1.5
+#   /model custom:nvidia-nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
 #   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
 #   /model custom:local:hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
 #   /model custom:anthropic-direct:claude-sonnet-5       (needs ANTHROPIC_API_KEY)
