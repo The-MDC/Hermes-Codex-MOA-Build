@@ -20,8 +20,12 @@ inventory script + this fallback change)
 3. `TAKEOVER.md` — the full six-phase bring-up, one success line per step.
 4. `configs/hermes/config.yaml` — the config itself carries the reasoning inline.
 
-Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.md`,
-`local-floor.md`. They carry banners. **Do not follow their instructions.**
+`running-the-stack.md`, `kimi-k3-quants.md`, and `local-floor.md` (the retired
+Kimi-K3-topology docs) were deleted 2026-09-27 as part of consolidating this repo
+down to one current doc set. Their request-economics and rate-limit-bucket
+reasoning is superseded by `configs/hermes/config.yaml`'s own inline comments on
+the current topology, which restate the same arguments fresh against what
+actually runs now.
 
 ---
 
