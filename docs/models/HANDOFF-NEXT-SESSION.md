@@ -33,14 +33,19 @@ subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5 high-c
             (swapped from nemotron-3-super-120b-a12b 2026-09-25, on request --
              120B is retired, no reference to it remains in config.yaml)
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
-floor       custom:local         hermes3:8b                        Ollama, 5 aux slots
+floor       custom:local         hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
+                                  Ollama, 5 aux slots (swapped from hermes3:8b 2026-09-25)
 
-vision +    custom:local-vl      nemotron-nano-12b-v2-vl           llama.cpp :8080, NOT Ollama
-heavy local                                                        images AND heavy local text
+vision      RETIRED as a local tier 2026-09-25, on request ("remove hermes 8B and
+            the 12b"). `local-vl` (nemotron-nano-12b-v2-vl, llama.cpp :8080) is
+            gone entirely; vision now routes to or-fallback (cloud), same as
+            before the local-vl tier ever existed. The new floor model is
+            text-only (Llama-3.2 3B), so this was never a vision-capable swap.
 
-auxiliary   5 slots -> hermes3:8b          routing, classification, titles, approval, curator
+auxiliary   5 slots -> Hermes-3-Llama-3.2-3B-abliterated:Q8_0   routing, classification,
+                                                                  titles, approval, curator
             2 slots -> V4.1-Flash          compression, web_extract
-            1 slot  -> local-vl            vision
+            1 slot  -> or-fallback         vision (was local-vl until 2026-09-25)
 moa         V4.1-Flash reference -> NIM Nemotron 49B aggregator (was 120B)
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
 
@@ -48,7 +53,8 @@ fallback_providers (ordered, added-to 2026-09-25):
   1. nvidia/llama-3.3-nemotron-super-49b-v1.5 on nvidia-nim (cloud, SAME bucket
      AND, since the 120B->49B swap, SAME model as subagents/delegation)
   2. deepseek/deepseek-v4.1-flash on or-fallback              (was fallback 1)
-  3. hermes3:8b local                                          (last resort, unchanged)
+  3. hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0 local
+     (last resort, unchanged in role -- swapped from hermes3:8b)
 
 anthropic-direct (claude-sonnet-5, Anthropic's OpenAI-compat endpoint) exists in
 providers: since 2026-09-25, wired into NOTHING above -- reachable only via
@@ -91,11 +97,11 @@ Three structural rules hold this together. Breaking any one fails **silently**:
 Be explicit about these. Each is the dangling-reference class that CI structurally
 cannot see.
 
-- **Whether `llama-server` is serving the VL model with its projector attached**, and
-  whether it produces real `tool_calls` rather than prose about calling a tool. The
-  GGUF source repo exists; serving it is a local step nothing here can observe.
-- **Whether `hermes3:8b` is pulled on the box.** The registry has it (see the table
-  above); the disk is the open question.
+- **Whether `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` is
+  pulled on the box.** `ollama pull` for it is documented (see the table above);
+  the disk is the open question, same class of gap as hermes3:8b's ever was.
+  (The old llama-server/VL-projector item that used to sit here no longer
+  applies -- that tier is retired, not just unverified.)
 - **`cloudflare` and `submcp` MCP URLs and tool lists** — taken from the handoff,
   never reachable from the build container. A wrong URL fails loudly; a wrong
   `tools.include` fails silently by filtering everything out.
@@ -171,11 +177,13 @@ runs it. `docs/models/VSCODE-QUICKSTART.md`, then
 
 ## Open, in priority order
 
-1. **Tool-calling test for both local models.** The step that catches a wrong chat
+1. **Tool-calling test for the local model.** The step that catches a wrong chat
    template. Skipping it means finding out later, via degraded tool use that looks
-   like a model quality problem. `VSCODE-QUICKSTART.md` §2.6 — run it for
-   `hermes3:8b` too, not just the heavy model: it carries five auxiliary slots, so
-   its tool calling matters more.
+   like a model quality problem. `VSCODE-QUICKSTART.md` §2.6 — this now covers
+   only one local model, `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-
+   GGUF:Q8_0` (swapped from hermes3:8b 2026-09-25); it carries five auxiliary
+   slots, so its tool calling matters. The separate local-vl tool-call check this
+   item used to also name is gone along with that tier.
 2. **Codex delegation, once.** `TAKEOVER.md` step 5.5. Nothing has ever exercised
    the path Hermes actually uses.
 

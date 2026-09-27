@@ -17,13 +17,21 @@ does not lift it:
 
 | | can drive | cannot drive |
 |---|---|---|
-| `hermes3:8b` (Ollama :11434) | Phase 2 onward — config install, verification, reading output back | Phases 0–1. It is an 8B on the floor tier; the steps that *install* the backends cannot be run by a model those backends serve |
-| `nemotron-nano-12b-v2-vl` (llama-server :8080) | step 1.3 onward, including screenshot checks | executing commands, until step 1.4's probes pass |
+| Local floor model (Ollama :11434) | Phase 2 onward — config install, verification, reading output back | Phase 0–1. It is a small model on the floor tier; the steps that *install* the backend cannot be run by a model that backend serves |
 | a human, or Claude with desktop access | everything from the start | — |
 
-**So the bootstrap is yours.** Steps 1.1 through 1.3 — Ollama, `hermes3:8b`,
-llama.cpp, `llama-server` — have to be run by a person or by a Claude session that
-holds a desktop link. Once `hermes3:8b` answers, the prompt below hands the rest over.
+**So the bootstrap is yours.** Steps 1.1 through 1.3 — installing Ollama and
+pulling `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (swapped
+from `hermes3:8b` 2026-09-25) — have to be run by a person or by a Claude session
+that holds a desktop link. Once that model answers, the prompt below hands the
+rest over.
+
+There used to be a second row here for `nemotron-nano-12b-v2-vl` on `llama-server
+:8080` -- the `local-vl` vision tier's own bootstrap constraint, since starting
+`llama-server` with `--mmproj` was its own manual step. That tier is retired
+(2026-09-25, on request), and with it the whole second bootstrap path: there is
+only one local model now, pulled with one `ollama pull` command, and nothing
+else to hand-start before Hermes can take over.
 
 ## The prompt
 
@@ -79,5 +87,7 @@ provider's endpoint and model id **out of the installed config** rather than
 restating them, so it cannot drift from what Hermes actually sends — which is how the
 OpenRouter id stayed wrong through a merge once.
 
-A `FAIL` on port 8080 means `llama-server` is not running. That is expected until
-step 1.3 is done and is the one failure that is not a defect.
+There is no port-8080 check to expect a `FAIL` from anymore -- that was
+`local-vl`'s llama-server, retired 2026-09-25 along with `hermes3:8b`. A genuine
+`FAIL` anywhere in this output now means something to actually fix, not a
+known, expected gap.

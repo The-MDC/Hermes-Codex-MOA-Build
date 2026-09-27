@@ -16,10 +16,15 @@ content, and the port fails if one survives into the output tree.
 parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
 subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5  high-compute delegation
 fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
-floor       custom:local         hermes3:8b (Ollama)                offline, 5 aux slots
-vision +    custom:local-vl      nemotron-nano-12b-v2-vl            llama.cpp :8080, NOT Ollama
-heavy local                                                         images AND heavy local text
+floor       custom:local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)   offline, 5 aux slots
 ```
+
+**There is no local vision tier anymore.** `local-vl` (nemotron-nano-12b-v2-vl on
+llama.cpp :8080) was removed 2026-09-25 along with the old floor model
+(hermes3:8b), on request. `vision` now routes to `custom:or-fallback`
+(DeepSeek-V4.1-Flash, cloud) instead — same as before the local-vl tier ever
+existed. The new floor model is Llama-3.2-based and text-only, so this wasn't a
+side effect of the swap: there was never a vision-capable replacement on offer.
 
 This diagram lists ROLES, not every provider. `anthropic-direct` (claude-sonnet-5,
 Anthropic's OpenAI-compatible endpoint) exists in `providers:` and is deliberately
@@ -32,10 +37,11 @@ on the MoA `aggregator:` block for why it was kept out.
 `nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, same
 bucket `nvidia-nim` already spends on subagents — a fallback firing there now
 competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
-still shows; local `hermes3:8b` remains last resort. That model id was NOT
-live-verified from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com
-are both egress-blocked there) — see the comment on the entry itself in
-`config.yaml` for the triangulation and the exact command to self-verify it.
+still shows; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
+remains last resort, unchanged in role. That NIM model id was NOT live-verified
+from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com are both
+egress-blocked there) — see the comment on the entry itself in `config.yaml` for
+the triangulation and the exact command to self-verify it.
 
 **Nemotron-3-Super-120B-A12B is retired from this file, on request (2026-09-25).**
 The `nvidia-nim` provider's `default_model`, `delegation:`, and the MoA

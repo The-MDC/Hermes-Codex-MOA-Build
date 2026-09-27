@@ -16,7 +16,7 @@ Three different reasons, and they are worth telling apart:
 | Reason | Steps | Why Hermes cannot |
 |---|---|---|
 | **Credentials** | A2, B4 | Only you hold the keys. Nothing in this repo has ever contained one, and `.gitignore` now enforces that. A step that asks an agent to handle a key is a step that logs it. |
-| **Bootstrap** | B1–B3 | The local tier cannot install the backends that serve it. hermes3:8b cannot install Ollama; the VL runner cannot start llama-server. |
+| **Bootstrap** | B1 | The local tier cannot install the backend that serves it — the floor model cannot install Ollama. (B2/B3 below, the VL runner's own bootstrap, are RETIRED — see those steps.) |
 | **Authority** | A1, A3, D3 | Renaming a repo, merging a PR, rotating a live token. Consequences outside this machine. |
 
 Everything else — Part C, the whole of it — Hermes runs.
@@ -70,64 +70,31 @@ command exits 0.
 
 ```powershell
 ollama list          # installs Ollama first if this is not recognised
-ollama pull hermes3:8b
+ollama pull hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
 ```
 
-**Success:** `ollama list` shows `hermes3:8b`.
+**Success:** `ollama list` shows the full tag above (swapped from `hermes3:8b`
+2026-09-25, on request).
 
-At this point Hermes has a backend and can talk. It still cannot do B2 or B3.
+At this point Hermes has a backend and can talk. That is now the whole of Part B's
+bootstrap — B2 and B3 below are retired.
 
-### B2. The VL model files · **YOU**
+### B2. The VL model files · RETIRED 2026-09-25
 
-≈10.5 GB, two files. **You need both** — the projector is what makes it see.
+This step, and B3 below, downloaded and served `nemotron-nano-12b-v2-vl` via a
+second local server (`local-vl`, llama.cpp on :8080). That tier is gone from
+`config.yaml` entirely, on request ("remove hermes 8B and the 12b"), and `vision`
+now routes to the cloud (`custom:or-fallback` / `deepseek/deepseek-v4.1-flash`) —
+the same route it used before this tier ever existed. Nothing to download or
+serve here anymore. Skip straight to B4.
 
-```powershell
-hf download Vastined/NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-GGUF `
-  --include '*Q5_K_M*.gguf' '*mmproj*.gguf' `
-  --local-dir "$HOME\Models\nemotron-nano-12b-v2-vl"
-```
+### B3. llama.cpp, and serve it · RETIRED 2026-09-25
 
-**Success:** `...VL-Q5_K_M.gguf` ≈ **8.77 GB** and `...VL-BF16-mmproj.gguf` ≈ **1.69 GB**.
-
-**Do not try this with Ollama.** `ollama create` *succeeds* while silently dropping
-the projector, leaving a model with `-VL` in its name that cannot see.
-
-### B3. llama.cpp, and serve it · **YOU**
-
-From <https://github.com/ggml-org/llama.cpp/releases>, take a **`b#####`** tag — not
-`v0.4.x`, those carry no Windows binaries. **Take a recent one — mid-2026 or later.**
-Current nightly is ~b11118 (2026-09-22) and carries everything needed.
-
-The old instruction here said "≥ b6315" and was wrong by about nine months. b6315 is
-where `nemotronh` landed — the **text** Nemotron Nano v2 (llama.cpp PR #15507, merged
-2025-08-29), which used to hold this slot. This model is `nemotron_v2_vl` and needs
-PR **#19547** (merged 2026-02-12) plus PR **#23638** (dynamic hi-res tiling, ~2026-05-25).
-Without #23638 every image encodes at a fixed 256 tokens whatever its resolution, which
-makes reading a screenshot of a dialog or a terminal — this tier's whole job —
-effectively useless (issue #25317).
-
-- NVIDIA → `llama-b#####-bin-win-cuda-12.4-x64.zip` **plus**
-  `cudart-llama-bin-win-cuda-12.4-x64.zip`, unzipped into the **same folder**.
-  Without the cudart, `llama-server.exe` dies on a missing DLL that never mentions CUDA.
-- Otherwise → `llama-b#####-bin-win-cpu-x64.zip`.
-
-```powershell
-$m = "$HOME\Models\nemotron-nano-12b-v2-vl"
-llama-server -m "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-Q5_K_M.gguf" `
-             --mmproj "$m\NVIDIA-Nemotron-Nano-12B-v2-VL-BF16-mmproj.gguf" `
-             --alias nemotron-nano-12b-v2-vl `
-             --host 127.0.0.1 --port 8080 `
-             -c 16384 -ngl 99 --jinja
-```
-
-**Success:** `(Invoke-RestMethod http://127.0.0.1:8080/v1/models).data.id` prints
-exactly `nemotron-nano-12b-v2-vl`.
-
-`--alias` is load-bearing; `-c 16384` must match `local-vl.context_length`; `--jinja`
-or the tool-call probe fails as *prose*; `--host 127.0.0.1` because this server takes
-no key.
-
-Leave it running for now. Promote it to a service at **D2**.
+Retired along with B2 above — there is no local vision server to build or run.
+The reasoning this step used to carry (build-floor requirements, the `--alias`/
+`--mmproj` flags, the two llama.cpp PRs a working build needed) is preserved in
+`configs/hermes/config.yaml`'s git history if it's ever needed again, but it no
+longer describes anything this file asks you to do.
 
 ### B4. The keys · **YOU**
 
@@ -199,18 +166,18 @@ it cannot drift from what Hermes actually sends.
 Expect these, and they are not defects:
 
 - `hermes not on PATH` warn — only if you did not install the CLI globally
-- port 8080 **FAIL** — only if you skipped B3 or the server stopped
 - upstream skill warns — only if C3 did not run
 
-### D2. Make llama-server survive a reboot · **YOU**
+There is no port-8080 check to expect a FAIL from anymore — B2/B3's llama-server
+is retired along with `local-vl`. A FAIL anywhere in this output now means
+something to actually fix.
 
-B3 leaves it in a terminal window. A window someone can close is not a deployment,
-and `vision` plus all heavy local text route through it.
+### D2. RETIRED 2026-09-25 · was "Make llama-server survive a reboot"
 
-1. **NSSM service** — survives logout and reboot, restarts on crash. Do this one.
-2. **Scheduled Task at log on** — no extra software; dies on a logged-out reboot.
-3. **Leave the terminal** — only while still bringing things up.
-4. **Docker** `--restart unless-stopped` — clean, but GPU passthrough adds a layer.
+This step existed to keep B3's llama-server running as a service rather than a
+closeable terminal window, since `vision` and all heavy local text routed
+through it. Both the server and that routing are gone: `vision` is on the cloud
+route now, so there is no local process to keep alive here. Skip to D3.
 
 ### D3. Decide the two open calls · **YOU**
 
@@ -232,11 +199,12 @@ that admits the gap:
 
 - **No script here has executed against a real Hermes install on Windows.** CI proves
   the files parse and agree with each other. It cannot prove behaviour.
-- **Whether a current llama.cpp build loads this VL model with its projector** — both
-  files exist (verified on the Hub: 8.77 GB + 1.69 GB) and `nemotron_v2_vl` support is
-  in PR #19547 by name. The two together on a real build is what B3 settles. A build
-  missing #19547 refuses loudly; one missing #23638 fails quietly, by reading
-  screenshots badly.
+- **Whether the new local floor model is pulled on the box** —
+  `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (swapped from
+  hermes3:8b 2026-09-25), verified live against the Hugging Face repo at 3.42 GB;
+  the disk is the open question, same class of gap hermes3:8b's ever was. (The
+  llama.cpp/VL-projector item that used to sit here no longer applies — B2/B3 are
+  retired, not just unverified.)
 - **The Codex shim has never run against a real `codex` binary.** Its error paths were
   exercised against a stub; the happy path is simulated.
 - **`cloudflare` and `submcp` MCP URLs and tool lists** came from a prior handoff and
