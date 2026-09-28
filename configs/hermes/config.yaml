@@ -28,16 +28,29 @@
 # target, not a record of either side.
 #
 #   parent      HF router      DeepSeek-V4-Pro           1.6T (49B active), 1M ctx
-#   subagents   NVIDIA NIM     Llama-3.3-Nemotron-Super-49B-v1.5  high-compute delegation
-#                              (swapped from Nemotron-3-Super-120B-A12B 2026-09-25)
-#   fallback    OpenRouter     DeepSeek-V4.1-Flash       552B, 8B/16B active, 1M ctx
-#               (+ NVIDIA NIM, same 49B model above, as fallback_providers[0] --
-#                see that block's comment)
+#                              STILL DEEPSEEK as of 2026-09-28 -- the one entry
+#                              DeepSeek removal has not reached yet. Every other
+#                              row below was reverted/moved off DeepSeek the same
+#                              day; this one needs a real decision first (Kimi-K3
+#                              was already retired here for 429s/size; promoting
+#                              nvidia-nim or or-fallback collapses the bucket
+#                              isolation those tiers exist for -- see VERIFY
+#                              BEFORE TRUSTING below).
+#   subagents   NVIDIA NIM     nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation
+#                              (also the MoA reference model now -- see moa: block)
+#   fallback    OpenRouter     Qwen3.5-122B-A10B          reverted off DeepSeek 2026-09-28
+#               (+ NVIDIA NIM, nemotron-3-nano-omni-30b-a3b-reasoning, as
+#                fallback_providers[0] -- see that block's comment)
 #   floor       your laptop    Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)
 #                              support, routing, memory -- swapped from hermes3:8b
 #                              2026-09-25, on request
+#   aggregator  your laptop    Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL
+#                              (Ollama) -- MoA aggregator only, moved here
+#                              2026-09-28 since its NVIDIA-hosted id is dead;
+#                              a standalone model in this build, not part of
+#                              docs/moa-b/BUILD.md's swarm roster
 #   vision                     RETIRED as a local tier 2026-09-25 -- reverted to
-#                              cloud (or-fallback/DeepSeek-V4.1-Flash). See
+#                              cloud (nvidia-nim/ising-calibration-1.5-31b). See
 #                              auxiliary.vision's comment.
 #
 # THE VISION-ON-A-SEPARATE-SERVER TIER THAT USED TO SIT HERE IS GONE, retired
@@ -73,10 +86,17 @@
 # reasoning is why the OpenRouter entry is called `or-fallback`.
 #
 # VERIFY BEFORE TRUSTING, things this file cannot check:
-#   1. That the HF router actually serves `deepseek-ai/DeepSeek-V4-Pro`. It is a
-#      1.6T model; the router's coverage at that size is not a given. Run
-#      `hermes models list` on the box. If it is absent, move the parent to
-#      `or-fallback` — also exclusion-safe — rather than renaming a provider.
+#   1. DEEPSEEK IS BEING REMOVED FROM THIS ROLE (2026-09-28, on request, repo-wide
+#      -- every other DeepSeek reference in this file is already gone). The
+#      replacement is NOT YET DECIDED. The advice this line used to give --
+#      "if hf-router doesn't serve it, move the parent to or-fallback, also
+#      exclusion-safe" -- is now WRONG on its own terms: or-fallback also carries
+#      the parent's own compression/web_extract auxiliary slots and part of the
+#      fallback chain, so putting the parent there too collapses the isolation
+#      those exist for, the same way putting the reference model on nvidia-nim
+#      alongside the aggregator would have (see the moa: block's comment for
+#      that exact conflict, just resolved). Pick the parent's replacement with
+#      that trade-off in view, not by reusing this old shortcut.
 #   2. That Ollama has actually pulled
 #      `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (see the
 #      `local` provider's comment for the pull command). A model listed here but
@@ -164,50 +184,23 @@ providers:
     # Third bucket: the 429 escape hatch, AND the workhorse for the two heavy
     # auxiliary slots. Both jobs land on one model on purpose.
     #
-    # This tier used to run Qwen3.5-122B-A10B. Replacing it with a DeepSeek keeps
-    # the whole cloud stack in ONE family -- one tokenizer, one chat template, one
-    # tool-call convention across parent, fallback and auxiliaries. It also makes
-    # failover stop being a trade: the old comment here had to explain what you
-    # gained and lost when the fallback fired. Now you lose nothing but latency.
+    # REVERTED to Qwen3.5-122B-A10B 2026-09-28, on request: DeepSeek removed
+    # globally from this build, repo-wide, not just from the MoA block. This is
+    # the same id this tier ran before a DeepSeek was ever put here (see
+    # `git show 84b3dc4` for the commit that first introduced it) -- reverting
+    # rather than picking something new, since this exact model already proved
+    # out on this bucket.
     #
-    # DeepSeek-V4.1-Flash, from its model card (Sep 2026, MIT):
-    #   552B backbone, MoE, multimodal -- takes images and text natively
-    #   1,000,000-token context
-    #   Causal Encoder-Decoder: 40 layers as a 20-layer causal encoder + 20-layer
-    #     decoder. The decoder's global KV is projected from the FINAL encoder
-    #     hidden states rather than per-decoder-layer, so it activates only
-    #     8B parameters per token on prefill and 16B on decode.
-    #   SWA Bounded Replay cuts persistent KV cache to ~1/8 of DeepSeek-V4-Flash.
-    #
-    # That prefill number is why this model suits this slot specifically. The card
-    # names "input-heavy agentic workloads" as the target, and compression and
-    # web_extract are exactly that shape: a large context in, a short summary out.
-    # Paying 8B-active on the input half is the whole cost of those slots.
-    #
-    # NO BENCHMARK FIGURES ARE QUOTED HERE. The previous entry carried measured
-    # numbers (BFCL-V4, MMMU-Pro) for a DIFFERENT model; they were deleted rather
-    # than carried across, because a benchmark belongs to the model it was run on.
-    #
-    # THE ID BELOW IS OPENROUTER'S, NOT HUGGING FACE'S. Do not "correct" it to
-    # match the model card. Same model, two namespaces:
-    #
-    #   Hugging Face   deepseek-ai/DeepSeek-V4.1-Flash    <- the hf-router form
-    #   OpenRouter     deepseek/deepseek-v4.1-flash       <- what THIS tier sends
-    #
-    # This entry carried the Hugging Face form for its whole life. OpenRouter serves
-    # nothing under that name, and `discover_models: false` means Hermes never
-    # probes /models to find out -- it sends the id and takes the 404. Four things
-    # died with it and none of them errored visibly: the 429 escape hatch,
-    # `compression` (which REWRITES conversation history), `web_extract`, and
-    # `vision` -- the slot that was repaired in the same change that shipped this.
-    #
-    # The parent's id two providers up is DIFFERENT ON PURPOSE: the HF router
-    # really does take the Hugging Face form. The rule is not "use lowercase", it
-    # is "each gateway names models in its own namespace" -- so an id copied from
-    # one provider to another is wrong by default, and this is the proof.
-    default_model: deepseek/deepseek-v4.1-flash
+    # Losing with this revert, stated plainly rather than glossed over: the
+    # "one family across parent/fallback/auxiliaries" property the DeepSeek
+    # pairing bought is gone the moment the parent stops being a DeepSeek too
+    # (tracked separately -- see the top-of-file comment and the `model:` block
+    # below). Re-verify context_length and tool-call behavior against Qwen's
+    # actual OpenRouter listing before trusting the number below; it has not
+    # been re-measured since the revert.
+    default_model: qwen/qwen3.5-122b-a10b
     models:
-      - deepseek/deepseek-v4.1-flash
+      - qwen/qwen3.5-122b-a10b
     discover_models: false
     # Held at the parent's window rather than the architectural million, for the
     # same reason: raise it to what the endpoint advertises, not the model card.
@@ -253,6 +246,15 @@ providers:
     default_model: hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
     models:
       - hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
+      # ADDED 2026-09-28, on request: the MoA aggregator (see moa.aggregator
+      # below) moved here from the now-dead NVIDIA-hosted 49B id. Split GGUF,
+      # 2 files, 58.68 GB combined -- live-verified via the Hugging Face Hub
+      # (unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF). `ollama pull
+      # hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` handles
+      # both parts automatically. This is a real jump from the 3.4 GB floor
+      # model above -- confirm the box actually has the VRAM/RAM before trusting
+      # this line, the same way the 3B's pull is assumed rather than verified.
+      - hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
     discover_models: false
     # `local-vl` (nemotron-nano-12b-v2-vl on llama.cpp :8080) is REMOVED, not just
     # unrouted -- the 120-line rationale that used to live here for why heavy
@@ -268,6 +270,12 @@ providers:
     # the model's native window. Raise it only as far as RAM tolerates -- and
     # note there is more room now than hermes3:8b left, since the weights
     # themselves are smaller (3.4 GB vs. hermes3:8b's ~4.7 GB Q4 tag).
+    #
+    # THIS WAS SIZED FOR THE 3B FLOOR MODEL ONLY. The 49B aggregator added above
+    # shares this same `local` provider and this same context_length -- not
+    # re-tuned for it. 32768 is a conservative floor that will run on the 49B
+    # too, just not verified as the RIGHT number for it; re-check once the 49B
+    # is actually pulled and you can measure real headroom.
     context_length: 32768
 
   anthropic-direct:
@@ -359,9 +367,9 @@ fallback_providers:
   # WAY. This entry reuses NVIDIA_API_KEY and build.nvidia.com, the identical
   # rate-limit bucket `delegation:` already spends on subagents. A fallback
   # firing here now competes with in-flight subagent calls for the same ~40 RPM,
-  # where the parent's OWN fallback (the DeepSeek entry just below) sits on a
-  # bucket nothing else touches. If that trade is unwanted, move this to its own
-  # credential or accept that a bad subagent fan-out can starve this fallback too.
+  # where fallback 2 just below sits on a bucket nothing else touches. If that
+  # trade is unwanted, move this to its own credential or accept that a bad
+  # subagent fan-out can starve this fallback too.
   #
   # SAME MODEL AS `nvidia-nim` ABOVE, TOO -- subagents and fallback 1 are not
   # diversified from each other, only by which failure each answers (the parent,
@@ -371,10 +379,12 @@ fallback_providers:
     model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
     base_url: https://integrate.api.nvidia.com/v1
     key_env: NVIDIA_API_KEY
-  # FALLBACK 2 (was fallback 1 until the entry above was added 2026-09-25).
-  # Unchanged in content -- only its position in the chain shifted.
+  # FALLBACK 2 (was fallback 1 until fallback 1 above was added 2026-09-25).
+  # REVERTED to Qwen3.5-122B-A10B 2026-09-28, on request: DeepSeek removed
+  # globally, not just from the MoA block. Matches `or-fallback`'s own
+  # default_model above -- see that entry's comment for why this exact id.
   - provider: custom
-    model: deepseek/deepseek-v4.1-flash
+    model: qwen/qwen3.5-122b-a10b
     base_url: https://openrouter.ai/api/v1
     key_env: OPENROUTER_API_KEY
   # Last resort, and the only entry that survives losing the network. Much smaller
@@ -422,8 +432,16 @@ delegation:
 # ---------------------------------------------------------------------------
 moa:
   reference_models:
-    - provider: "custom:hf-router"
-      model: deepseek-ai/DeepSeek-V4-Pro
+    # REVERTED off hf-router/DeepSeek 2026-09-28, on request: DeepSeek removed
+    # globally from this build. Moved to the same NVIDIA NIM id subagents,
+    # fallback 1 and or-fallback's own history already use elsewhere in this
+    # file -- live-verified the same way (see the `nvidia-nim` provider entry).
+    # This is also WHY the aggregator below moved off nvidia-nim to local: the
+    # rule two comments up ("reference and aggregator sit on DIFFERENT
+    # providers on purpose") would otherwise be broken by putting both on the
+    # same nvidia-nim bucket running the same model against itself.
+    - provider: "custom:nvidia-nim"
+      model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
       enabled: true
   aggregator:
     # DELIBERATELY NOT anthropic-direct, EVEN THOUGH IT NOW EXISTS.
@@ -440,25 +458,27 @@ moa:
     #   of the stack. That thesis does not apply to a metered API tier the same
     #   way, which is exactly why this tier was kept OUT of anything automatic.
     #
-    #   self-grading — the reference pool is DeepSeek-V4-Pro. Aggregating with
-    #   another frontier model from a DIFFERENT family is closer to what MoA is
-    #   for than aggregating with more of the same family would be, so Claude
-    #   is not a bad technical fit here. That is a reason it COULD move here
-    #   later, not a reason it silently did.
-    #
     # If you want Claude as the aggregator, that is a one-line, deliberate edit
     # (provider: "custom:anthropic-direct", model: claude-sonnet-5) — not this
     # comment's job to make for you.
-    # Was nvidia/llama-3.3-nemotron-super-49b-v1.5 -- confirmed DEAD (HTTP 410,
-    # EOL 2026-08-26), swapped 2026-09-27 to the same live-verified replacement
-    # used for subagents/fallback 1 above.
-    provider: "custom:nvidia-nim"
-    model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
+    #
+    # MOVED TO custom:local 2026-09-28, on request: keep this exact 49B Nemotron
+    # as the aggregator -- it is a standalone model in this build, not part of
+    # the docs/moa-b/BUILD.md swarm roster, and not reused across another role
+    # the way BUILD.md's Generator/Reviewer share one CodeLlama-13B file. Its
+    # NVIDIA-hosted id (nvidia/llama-3.3-nemotron-super-49b-v1.5) is confirmed
+    # DEAD (HTTP 410, EOL 2026-08-26), so it serves from the same Unsloth
+    # UD-Q8_K_XL GGUF referenced in the `local` provider's comment instead --
+    # requires that model actually pulled and running in Ollama, not just
+    # declared here. This also frees nvidia-nim for the reference model above
+    # without the two sharing a bucket.
+    provider: "custom:local"
+    model: hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
   presets:
     default:
       reference_models:
-        - provider: "custom:hf-router"
-          model: deepseek-ai/DeepSeek-V4-Pro
+        - provider: "custom:nvidia-nim"
+          model: nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
           enabled: true
 
 # ---------------------------------------------------------------------------
@@ -504,10 +524,11 @@ web:
 # invisible to each other. CI asserts this entry stays present.
 #
 # Switching mid-session, with the names as they now stand:
-#   /model custom:hf-router:deepseek-ai/DeepSeek-V4-Pro
+#   /model custom:hf-router:deepseek-ai/DeepSeek-V4-Pro   (PARENT'S REPLACEMENT NOT YET DECIDED -- still DeepSeek, see top-of-file comment)
 #   /model custom:nvidia-nim:nvidia/nemotron-3-nano-omni-30b-a3b-reasoning
-#   /model custom:or-fallback:deepseek/deepseek-v4.1-flash
+#   /model custom:or-fallback:qwen/qwen3.5-122b-a10b
 #   /model custom:local:hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
+#   /model custom:local:hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
 #   /model custom:anthropic-direct:claude-sonnet-5       (needs ANTHROPIC_API_KEY)
 # ---------------------------------------------------------------------------
 excluded_providers:
@@ -761,10 +782,10 @@ mcp_servers:
 auxiliary:
   compression:
     provider: "custom:or-fallback"
-    model: deepseek/deepseek-v4.1-flash
+    model: qwen/qwen3.5-122b-a10b
   web_extract:
     provider: "custom:or-fallback"
-    model: deepseek/deepseek-v4.1-flash
+    model: qwen/qwen3.5-122b-a10b
   # VISION: MOVED TO NVIDIA NIM 2026-09-27, on request -- a purpose-built
   # vision-language model on the SAME provider/key subagents and fallback 1
   # already use, rather than DeepSeek-V4.1-Flash doing vision as a side
@@ -854,6 +875,11 @@ compression:
   enabled: true
   threshold: 0.50          # global default, unchanged
   model_thresholds:
+    # STALE as of 2026-09-28: DeepSeek-V4-Pro is being removed from the parent
+    # role (see the top-of-file routing comment and the `model:` block below --
+    # replacement not yet decided). This key matches nothing once that lands,
+    # so the 262k-window reasoning above falls back to the 0.50 global default
+    # until whatever replaces the parent gets its own threshold tuned in.
     "DeepSeek-V4-Pro": 0.70
   target_ratio: 0.20
   tail_mode: lean

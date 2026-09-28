@@ -13,22 +13,39 @@ content, and the port fails if one survives into the output tree.
 ## The routing
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
-subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation
-fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
+parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        BEING REMOVED, replacement not yet decided
+subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation, also MoA reference
+fallback    custom:or-fallback   qwen/qwen3.5-122b-a10b             429 escape + 2 heavy aux
 floor       custom:local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)   offline, 5 aux slots
+aggregator  custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  MoA aggregator only, standalone
 ```
+
+**DeepSeek is being removed from this build, repo-wide, on request (2026-09-28).**
+Every role above except `parent` already moved off it: `fallback` (and the two
+heavy auxiliary slots riding on it) reverted to `qwen/qwen3.5-122b-a10b`, the
+id that role ran before a DeepSeek was ever put there; the MoA reference model
+moved to `nemotron-3-nano-omni-30b-a3b-reasoning`; the MoA aggregator moved to
+a local 49B Nemotron GGUF specifically so it would not share a bucket with that
+same reference model (same-provider MoA self-grades — see the `moa:` comment in
+`config.yaml`). `parent` is the one entry left: every non-fabricated
+replacement found so far trades away something real (Kimi-K3 was already
+retired here for 429s/size; promoting nvidia-nim collapses the parent/subagents
+bucket isolation; promoting or-fallback collapses the parent/auxiliary
+isolation; the local 49B is a standalone model in this build, not a routing
+tier). See `config.yaml`'s top-of-file comment for the specifics — this is
+parked pending a decision, not guessed at.
 
 **There is no local vision tier anymore.** `local-vl` (nemotron-nano-12b-v2-vl on
 llama.cpp :8080) was removed 2026-09-25 along with the old floor model
-(hermes3:8b), on request. `vision` now routes to `custom:or-fallback`
-(DeepSeek-V4.1-Flash, cloud) instead — same as before the local-vl tier ever
-existed. The new floor model is Llama-3.2-based and text-only, so this wasn't a
-side effect of the swap: there was never a vision-capable replacement on offer.
+(hermes3:8b), on request. `vision` now routes to `custom:nvidia-nim`
+(`nvidia/ising-calibration-1.5-31b`, cloud) instead, moved there 2026-09-27 off
+an earlier or-fallback/DeepSeek revert of the same slot. The floor model is
+Llama-3.2-based and text-only, so none of this was a side effect of any swap:
+there was never a vision-capable replacement on the laptop tier.
 
 This diagram lists ROLES, not every provider. `anthropic-direct` (claude-sonnet-5,
 Anthropic's OpenAI-compatible endpoint) exists in `providers:` and is deliberately
-wired into none of the five roles above — reachable only via
+wired into none of the roles above — reachable only via
 `/model custom:anthropic-direct:claude-sonnet-5`. See the comment on that entry and
 on the MoA `aggregator:` block for why it was kept out.
 
@@ -36,8 +53,8 @@ on the MoA `aggregator:` block for why it was kept out.
 `fallback` row is now two links deep. **Fallback 1** is
 `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on NVIDIA NIM (cloud-hosted, same
 bucket `nvidia-nim` already spends on subagents — a fallback firing there now
-competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
-still shows; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
+competes with delegation traffic); **fallback 2** is `qwen/qwen3.5-122b-a10b`,
+matching the table above; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
 remains last resort, unchanged in role.
 
 **The id above is a 2026-09-27 replacement for a dead model, not the original

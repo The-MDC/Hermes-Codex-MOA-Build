@@ -1,10 +1,18 @@
-# VS Code quickstart — local tier + DeepSeek, on Windows
+# VS Code quickstart — local tier + cloud tiers, on Windows
 
 The fast path. Gets the local floor model
 (`hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0`, swapped from
-`hermes3:8b` 2026-09-25) and both DeepSeek tiers working, and nothing else. The
-full bring-up, including MCP servers, is `TAKEOVER.md`; this is the subset you
-need before any of that matters.
+`hermes3:8b` 2026-09-25) and the cloud tiers working, and nothing else. The full
+bring-up, including MCP servers, is `TAKEOVER.md`; this is the subset you need
+before any of that matters.
+
+**DeepSeek is being removed from this build, repo-wide, on request (2026-09-28).**
+This file used to be titled around it -- `fallback` below is now
+`qwen/qwen3.5-122b-a10b`, not a DeepSeek id. `parent` is the one tier where a
+replacement has not been decided yet (every non-fabricated candidate found so
+far trades away something real -- see `config.yaml`'s top-of-file comment); it
+still shows DeepSeek-V4-Pro below because that is what the repo copy of
+`config.yaml` still says, not because it's been re-confirmed as the plan.
 
 Every step has a **success line**. A step is done when the output matches it —
 not when the command exits without complaining. That distinction is the whole
@@ -112,10 +120,10 @@ This one model already unblocks five of the eight auxiliary slots — routing,
 classification, tool selection, titles, curation. If you stop here you have a
 working floor.
 
-## 3. DeepSeek
+## 3. Cloud tiers
 
-**Nothing is installed locally.** DeepSeek-V4-Pro is 1.6T parameters and
-V4.1-Flash is 552B; both are API-only. This step is two keys and a file.
+**Nothing here is installed locally.** These are all API-only. This step is
+keys and a file.
 
 ### 3.1 — Create the env file
 
@@ -138,9 +146,9 @@ OPENROUTER_API_KEY=sk-or-v1-...
 
 | key | from | serves |
 |---|---|---|
-| `HF_TOKEN` | huggingface.co/settings/tokens | **parent** — DeepSeek-V4-Pro |
-| `OPENROUTER_API_KEY` | openrouter.ai/keys | **fallback + heavy aux** — DeepSeek-V4.1-Flash |
-| `NVIDIA_API_KEY` | build.nvidia.com | **subagents + fallback 1** — Llama-3.3-Nemotron-Super-49B-v1.5 (swapped from Nemotron-3-Super-120B 2026-09-25) |
+| `HF_TOKEN` | huggingface.co/settings/tokens | **parent** — DeepSeek-V4-Pro, being replaced (not yet decided) |
+| `OPENROUTER_API_KEY` | openrouter.ai/keys | **fallback 2 + heavy aux** — Qwen3.5-122B-A10B |
+| `NVIDIA_API_KEY` | build.nvidia.com | **subagents + fallback 1 + MoA reference + vision** — nemotron-3-nano-omni-30b-a3b-reasoning |
 
 Only `NVIDIA_API_KEY` is strictly required for Hermes to start. Missing either
 other key makes that tier fail over silently rather than error, which is why
@@ -200,9 +208,10 @@ completion alone cannot tell a wrong model id from an exhausted quota, and those
 need opposite fixes.
 
 **This is the step that answers the one thing CI structurally cannot:** whether
-`deepseek-ai/DeepSeek-V4-Pro` is actually served by the HF router, and whether
-`deepseek/deepseek-v4.1-flash` is actually on OpenRouter. Neither was
-verifiable from the build container.
+the parent's model (whatever `config.yaml` says once the DeepSeek replacement
+is decided) is actually served by its provider, and whether
+`qwen/qwen3.5-122b-a10b` is actually on OpenRouter. Neither is verifiable from
+the build container.
 
 Three outcomes, three different meanings:
 
@@ -221,14 +230,21 @@ replacement model is a design decision, not a retry.
 ## What you have at this point
 
 ```
-parent      hf-router     DeepSeek-V4-Pro                              API only
-subagents   nvidia-nim    Llama-3.3-Nemotron-Super-49B-v1.5             API only
-                          (swapped from Nemotron-3-Super-120B 2026-09-25)
-fallback    or-fallback   DeepSeek-V4.1-Flash    API only, also 2 heavy aux slots
-            (+ NVIDIA NIM, same 49B model above, as fallback_providers[0])
+parent      hf-router     DeepSeek-V4-Pro          API only -- REPLACEMENT NOT YET DECIDED
+subagents   nvidia-nim    nemotron-3-nano-omni-30b-a3b-reasoning     API only
+                          (also the MoA reference model)
+fallback    or-fallback   Qwen3.5-122B-A10B      API only, also 2 heavy aux slots
+            (+ NVIDIA NIM, nemotron-3-nano-omni-30b-a3b-reasoning, as fallback_providers[0])
 floor       local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0
                           5 aux slots, offline-capable (swapped from hermes3:8b)
 ```
+
+**Not covered by the fast path above:** the MoA aggregator, a separate local
+pull of `hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (split
+GGUF, ~58.68 GB combined) via the same `ollama pull hf.co/...` pattern as step
+2.1. It only matters if you actually run `/moa`; skip it for the floor-only fast
+path this file promises. Confirm real disk/VRAM headroom before pulling it --
+it is an order of magnitude past the 3.4 GB floor model above.
 
 Not covered here, deliberately: the seven MCP servers, `hermes-council`'s
 dependency fault, and the Codex bridge handshake. None of them gate the model
@@ -240,7 +256,7 @@ covered a separate `local-vl` provider (nemotron-nano-12b-v2-vl, llama.cpp on
 :8080) that Ollama could not serve directly -- it cannot attach the `mmproj`
 projector a VL model needs, and fails by silently dropping vision rather than
 refusing. That tier is retired, on request, along with hermes3:8b. `vision`
-routes to `custom:or-fallback` / `deepseek/deepseek-v4.1-flash` now -- natively
-multimodal, and the same route this slot used before local-vl ever existed. No
-second local service, no build-floor check, nothing for `hermes-verify.ps1` to
-fail on port 8080 anymore (that check is gone too).
+routes to `custom:nvidia-nim` / `nvidia/ising-calibration-1.5-31b` now (moved
+there 2026-09-27, off an earlier or-fallback/DeepSeek revert of the same slot).
+No second local service, no build-floor check, nothing for `hermes-verify.ps1`
+to fail on port 8080 anymore (that check is gone too).

@@ -30,7 +30,8 @@ nothing complained.
 
 `vision` used to be its own tier (`custom:local-vl`, llama-server :8080). Retired
 2026-09-25 along with the old floor model (hermes3:8b) — `vision` now routes to
-`custom:or-fallback` (cloud), and the floor is a single, smaller Ollama tag
+`custom:nvidia-nim` (cloud, moved there 2026-09-27 after briefly sitting on
+`custom:or-fallback`), and the floor is a single, smaller Ollama tag
 (`hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0`, pulled via
 Ollama's own hf.co/ feature, no second local service).
 

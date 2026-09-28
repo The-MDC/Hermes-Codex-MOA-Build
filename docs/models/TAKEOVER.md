@@ -103,10 +103,12 @@ via a second local server (`local-vl`, llama.cpp on :8080) — the VL runner the
 old Division of Labour section described. That tier is gone from
 `config.yaml` entirely, on request ("remove hermes 8B and the 12b").
 
-`vision` now routes to the cloud: `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`,
-the same route it used before this tier ever existed and the one-line revert
-this file always documented as the alternative to running a second local
-service. Nothing to download, build, or serve here anymore.
+`vision` routed to the cloud after that -- first `custom:or-fallback` /
+`deepseek/deepseek-v4.1-flash` (the one-line revert this file always documented
+as the alternative to running a second local service), then moved again
+2026-09-27 to `custom:nvidia-nim` / `nvidia/ising-calibration-1.5-31b`, which is
+where it lives now. Nothing to download, build, or serve here anymore either
+way.
 
 The reasoning this step used to carry — why Ollama can't be trusted with a
 VL GGUF's separate `mmproj` projector, the exact llama.cpp build floor and the
@@ -118,9 +120,8 @@ Phase 2.
 ### Step 1.4 — RETIRED 2026-09-25 · was "Prove the VL model SEES and CALLS TOOLS"
 
 Retired along with Step 1.3 above — there is no local vision model left to
-probe. `vision`'s cloud route (DeepSeek-V4.1-Flash) is natively multimodal and
-was verified as this slot's fix before the VL tier ever existed; nothing new
-to prove here.
+probe. `vision`'s current cloud route (`nvidia/ising-calibration-1.5-31b` on
+NVIDIA NIM) is natively multimodal; nothing new to prove here.
 
 ---
 
@@ -415,23 +416,30 @@ Five tests: one per tier, plus Codex delegation. Run them in order.
 
 ### Step 5.1 — Parent
 
+**DEEPSEEK IS BEING REMOVED FROM THIS BUILD (2026-09-28, on request, repo-wide)
+and `parent` is the one role that hasn't landed a replacement yet** — see
+`config.yaml`'s top-of-file comment and `HANDOFF-NEXT-SESSION.md` for the open
+options and why each has a real cost. Whatever `model.default` says in your
+installed `config.yaml` is the id to expect below, not necessarily DeepSeek.
+
 ```powershell
 hermes --print "Reply with exactly: parent-ok"
 ```
 
-**Success:** `parent-ok`, and `hermes` reports the model as
-`deepseek-ai/DeepSeek-V4-Pro`.
+**Success:** `parent-ok`, and `hermes` reports the model as whatever
+`model.default` in `config.yaml` currently names.
 
-**ESCALATE** if it answers on a different model — but **not** for the reason this
-step used to give. It said the likely cause was the HF router not serving a 1.6T
-model, and that has since been checked: the router serves
-`deepseek-ai/DeepSeek-V4-Pro` through four live inference providers (novita,
-featherless-ai, deepinfra, baseten). Coverage is not the problem.
+**ESCALATE** if it answers on a different model than that. While the parent was
+still DeepSeek-V4-Pro, this was checked directly: the HF router serves it
+through four live inference providers (novita, featherless-ai, deepinfra,
+baseten), so router coverage was never the failure mode there. Kept as a
+reminder that "does the router even carry this model" is a real, checkable
+question for whatever id replaces it, not just for DeepSeek.
 
 So a different model here means something else — a silent substitution by the
 router, a `discover_models` regression that unpinned the picker, or the parent
-falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
-`hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
+falling through to `fallback_providers` because the relevant key is absent or
+spent. `hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
 *returned* alongside the one requested.
 
 ### Step 5.2 — Delegation

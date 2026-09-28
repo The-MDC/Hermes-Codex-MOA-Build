@@ -7,16 +7,16 @@ authoritative version does not rot the same way. Dated records still have a plac
 `handoff-2026-09-22.md` is a record of *what was reported on a day* and is annotated
 rather than edited — but "what is true now" belongs here, and only here.
 
-Last updated: 2026-09-25 · Branch: `claude/lucid-noether-0ui54b` (reset from `The-MDC`
-after PR #13 merged) · PR #13 **merged**, PR #17 open (`anthropic-direct` +
-inventory script + this fallback change)
+Last updated: 2026-09-28 · Branch: `claude/retire-dead-49b-nemotron` · DeepSeek
+removal in progress repo-wide, on request — every role below except `parent`
+is done; `parent` is the one open item (see below).
 
 ---
 
 ## Orientation: read these, in this order
 
 1. **This file** — state, open items, and what needs a human.
-2. `VSCODE-QUICKSTART.md` — fast path: Ollama, two local models, both DeepSeek tiers.
+2. `VSCODE-QUICKSTART.md` — fast path: Ollama, the local floor model, and the cloud tiers.
 3. `TAKEOVER.md` — the full six-phase bring-up, one success line per step.
 4. `configs/hermes/config.yaml` — the config itself carries the reasoning inline.
 
@@ -28,39 +28,58 @@ Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.
 ## The architecture as committed
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       1.6T / 49B active, 1M ctx
-subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning high-compute delegation
+parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       BEING REMOVED, replacement not yet decided
+subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning high-compute delegation, also MoA reference
             (swapped 2026-09-27 -- llama-3.3-nemotron-super-49b-v1.5, itself
              swapped from nemotron-3-super-120b-a12b 2026-09-25, is confirmed
              DEAD: HTTP 410, EOL 2026-08-26, hit live on this NIM account)
-fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash      552B / 8B prefill, 16B decode
+fallback    custom:or-fallback   qwen/qwen3.5-122b-a10b            reverted off DeepSeek 2026-09-28
 floor       custom:local         hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
                                   Ollama, 5 aux slots (swapped from hermes3:8b 2026-09-25)
+aggregator  custom:local         hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
+                                  Ollama, MoA aggregator ONLY -- standalone, not a routing tier,
+                                  not part of docs/moa-b/BUILD.md's swarm roster either
 
 vision      RETIRED as a local tier 2026-09-25, on request ("remove hermes 8B and
             the 12b"). `local-vl` (nemotron-nano-12b-v2-vl, llama.cpp :8080) is
-            gone entirely; vision now routes to or-fallback (cloud), same as
-            before the local-vl tier ever existed. The new floor model is
-            text-only (Llama-3.2 3B), so this was never a vision-capable swap.
+            gone entirely; vision now routes to nvidia-nim
+            (nvidia/ising-calibration-1.5-31b, cloud, moved there 2026-09-27 off
+            an earlier or-fallback/DeepSeek revert of the same slot). The floor
+            model is text-only (Llama-3.2 3B), so none of this was ever a
+            vision-capable swap.
 
 auxiliary   5 slots -> Hermes-3-Llama-3.2-3B-abliterated:Q8_0   routing, classification,
                                                                   titles, approval, curator
-            2 slots -> V4.1-Flash          compression, web_extract
-            1 slot  -> or-fallback         vision (was local-vl until 2026-09-25)
-moa         V4.1-Flash reference -> NIM Nemotron 30B-a3b aggregator (was 49B, was 120B)
+            2 slots -> qwen/qwen3.5-122b-a10b      compression, web_extract (reverted 2026-09-28)
+            1 slot  -> nvidia-nim                  vision (ising-calibration-1.5-31b)
+moa         nvidia-nim Nemotron 30B-a3b reference -> local 49B Nemotron aggregator
+            (reference moved off DeepSeek/hf-router 2026-09-28; aggregator moved off
+            the now-dead NVIDIA-hosted 49B id to a local Ollama GGUF of the same
+            model, specifically so it does not share nvidia-nim's bucket with the
+            reference model above -- same-provider MoA self-grades)
 mcp         7 servers, 2 hosted (cloudflare, submcp) on an explicit CI allowlist
 
 fallback_providers (ordered):
   1. nvidia/nemotron-3-nano-omni-30b-a3b-reasoning on nvidia-nim (cloud, SAME
      bucket AND SAME model as subagents/delegation; swapped 2026-09-27 from the
      now-confirmed-dead llama-3.3-nemotron-super-49b-v1.5)
-  2. deepseek/deepseek-v4.1-flash on or-fallback              (was fallback 1)
+  2. qwen/qwen3.5-122b-a10b on or-fallback (was fallback 1; reverted off
+     deepseek/deepseek-v4.1-flash 2026-09-28)
   3. hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0 local
      (last resort, unchanged in role -- swapped from hermes3:8b)
 
 anthropic-direct (claude-sonnet-5, Anthropic's OpenAI-compat endpoint) exists in
 providers: since 2026-09-25, wired into NOTHING above -- reachable only via
 /model custom:anthropic-direct:claude-sonnet-5.
+
+OPEN: `parent` is the one role DeepSeek removal has not reached. Every
+non-fabricated candidate checked so far costs something real: Kimi-K3 (the
+pre-DeepSeek parent, see `git show 84b3dc4`) was already retired here for 429s
+and size; promoting nvidia-nim's Nemotron collapses the parent/subagents bucket
+isolation; promoting or-fallback collapses the parent/compression/web_extract
+isolation; the local 49B is explicitly standalone in this build (MoA aggregator
+only). See `config.yaml`'s top-of-file "VERIFY BEFORE TRUSTING" comment for the
+current state of this question -- needs a human decision, not another swap.
 ```
 
 Three structural rules hold this together. Breaking any one fails **silently**:
