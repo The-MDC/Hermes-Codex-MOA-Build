@@ -13,12 +13,12 @@ Five tiers, each on its own rate-limit bucket. That isolation is the point: the
 parent cannot starve its own children, and losing the network costs cloud capability
 but not the floor.
 
-| Tier | Provider | Model | Role |
-|---|---|---|---|
-| parent | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | 1.6T (49B active), 1M ctx |
-| subagents | `custom:nvidia-nim` | `nvidia/llama-3.3-nemotron-super-49b-v1.5` | high-compute delegation |
-| fallback | `custom:or-fallback` | `deepseek/deepseek-v4.1-flash` | 429 escape, 2 heavy aux slots |
-| floor | `custom:local` | `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (Ollama) | offline, 5 auxiliary slots |
+| Tier     | Provider           | Model                         | Role 
+|--        |---                 |---                            |---                                                        |
+| parent   | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | 1.6T (49B active), 1M ctx |
+| subagents| `custom:nvidia-nim`| `nvidia/llama-3.3-nemotron-super-49b-v1.5` | high-compute delegation |
+| fallback | `custom:or-fallback`| `deepseek/deepseek-v4.1-flash` | 429 escape, 2 heavy aux slots |
+| floor    | `custom:local`     | `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (Ollama) | offline, 5 auxiliary slots |
 
 The `fallback` row compresses an ordered chain in `fallback_providers:`. As of
 2026-09-25 it is two cloud links deep before the local last resort: **1)**
@@ -133,3 +133,5 @@ the files parse and agree with each other; it cannot prove behaviour.
 - Everything Claude Code — github.com/affaan-m/everything-claude-code
 - Cloudflare security-audit skill (MIT) — github.com/cloudflare/security-audit-skill
 - Codex CLI — github.com/openai/codex
+
+
