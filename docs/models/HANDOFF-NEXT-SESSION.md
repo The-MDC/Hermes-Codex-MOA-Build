@@ -7,9 +7,10 @@ authoritative version does not rot the same way. Dated records still have a plac
 `handoff-2026-09-22.md` is a record of *what was reported on a day* and is annotated
 rather than edited — but "what is true now" belongs here, and only here.
 
-Last updated: 2026-09-28 · Branch: `claude/retire-dead-49b-nemotron` · DeepSeek
-removal in progress repo-wide, on request — every role below except `parent`
-is done; `parent` is the one open item (see below).
+Last updated: 2026-09-30 · Branch: `claude/retire-dead-49b-nemotron` · DeepSeek
+is fully removed repo-wide, on request — including `parent`, which moved to
+the local 49B Nemotron GGUF ("the current parent is the 49B Nemotron"). No
+open items on this thread.
 
 ---
 
@@ -20,15 +21,20 @@ is done; `parent` is the one open item (see below).
 3. `TAKEOVER.md` — the full six-phase bring-up, one success line per step.
 4. `configs/hermes/config.yaml` — the config itself carries the reasoning inline.
 
-Retired, kept only for their reasoning: `running-the-stack.md`, `kimi-k3-quants.md`,
-`local-floor.md`. They carry banners. **Do not follow their instructions.**
+`running-the-stack.md`, `kimi-k3-quants.md`, and `local-floor.md` (the retired
+Kimi-K3-topology docs) were deleted 2026-09-27 as part of consolidating this repo
+down to one current doc set. Their request-economics and rate-limit-bucket
+reasoning is superseded by `configs/hermes/config.yaml`'s own inline comments on
+the current topology, which restate the same arguments fresh against what
+actually runs now.
 
 ---
 
 ## The architecture as committed
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro       BEING REMOVED, replacement not yet decided
+parent      custom:local         hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
+                                  Ollama, moved off DeepSeek/hf-router 2026-09-28, on request
 subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning high-compute delegation, also MoA reference
             (swapped 2026-09-27 -- llama-3.3-nemotron-super-49b-v1.5, itself
              swapped from nemotron-3-super-120b-a12b 2026-09-25, is confirmed
@@ -37,8 +43,10 @@ fallback    custom:or-fallback   qwen/qwen3.5-122b-a10b            reverted off 
 floor       custom:local         hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0
                                   Ollama, 5 aux slots (swapped from hermes3:8b 2026-09-25)
 aggregator  custom:local         hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
-                                  Ollama, MoA aggregator ONLY -- standalone, not a routing tier,
-                                  not part of docs/moa-b/BUILD.md's swarm roster either
+                                  Ollama, same GGUF as parent, MoA aggregator role only --
+                                  not a self-grading conflict since parent and aggregator
+                                  are unrelated roles, not part of docs/moa-b/BUILD.md's
+                                  swarm roster either
 
 vision      RETIRED as a local tier 2026-09-25, on request ("remove hermes 8B and
             the 12b"). `local-vl` (nemotron-nano-12b-v2-vl, llama.cpp :8080) is
@@ -72,21 +80,24 @@ anthropic-direct (claude-sonnet-5, Anthropic's OpenAI-compat endpoint) exists in
 providers: since 2026-09-25, wired into NOTHING above -- reachable only via
 /model custom:anthropic-direct:claude-sonnet-5.
 
-OPEN: `parent` is the one role DeepSeek removal has not reached. Every
-non-fabricated candidate checked so far costs something real: Kimi-K3 (the
-pre-DeepSeek parent, see `git show 84b3dc4`) was already retired here for 429s
-and size; promoting nvidia-nim's Nemotron collapses the parent/subagents bucket
-isolation; promoting or-fallback collapses the parent/compression/web_extract
-isolation; the local 49B is explicitly standalone in this build (MoA aggregator
-only). See `config.yaml`'s top-of-file "VERIFY BEFORE TRUSTING" comment for the
-current state of this question -- needs a human decision, not another swap.
+RESOLVED: `parent` moved to `custom:local` / the same 49B Nemotron GGUF the MoA
+aggregator uses, on request. This was the one open question left after the
+first DeepSeek-removal pass -- every cloud candidate checked cost something
+real (Kimi-K3, the pre-DeepSeek parent, see `git show 84b3dc4`, was already
+retired here for 429s and size; promoting nvidia-nim's Nemotron would have
+collapsed the parent/subagents bucket isolation; promoting or-fallback would
+have collapsed the parent/compression/web_extract isolation) -- moving parent
+local sidesteps all three, since local has no cloud rate-limit bucket to
+collapse. The `hf-router` provider is removed entirely: it existed for exactly
+one reason (serving DeepSeek-V4-Pro as parent) and nothing else in this file
+ever used it.
 ```
 
 Three structural rules hold this together. Breaking any one fails **silently**:
 
 1. **Provider references must dodge `excluded_providers`.** `deepseek`, `openrouter`
    and `ollama` are all excluded, and exclusion matches every key a provider surfaces
-   under. That is why the entries are named `hf-router`, `or-fallback` and `local`.
+   under. That is why the remaining entries are named `or-fallback` and `local`.
    Naming an excluded provider directly resolves to nothing and falls back to the
    main model — a bill and a latency change, no error.
 2. **Subagents must not share the parent's provider.** Not "must avoid NIM" — that

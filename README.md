@@ -9,29 +9,35 @@ scripts, skills and documentation — nothing that ships to an end user.
 
 ## The routing
 
-Five tiers, each on its own rate-limit bucket. That isolation is the point: the
-parent cannot starve its own children, and losing the network costs cloud capability
-but not the floor.
+Four remote-ish roles plus a local one, no longer on four separate rate-limit
+buckets the way this section used to describe — the parent itself moved local,
+see below.
 
 | Tier | Provider | Model | Role |
 |---|---|---|---|
-| parent | `custom:hf-router` | `deepseek-ai/DeepSeek-V4-Pro` | **being removed — replacement not yet decided, see below** |
+| parent | `custom:local` | `hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (Ollama) | moved off DeepSeek/hf-router 2026-09-28, on request |
 | subagents | `custom:nvidia-nim` | `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` | high-compute delegation, also the MoA reference model |
 | fallback | `custom:or-fallback` | `qwen/qwen3.5-122b-a10b` | 429 escape, 2 heavy aux slots |
 | floor | `custom:local` | `hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0` (Ollama) | offline, 5 auxiliary slots |
-| aggregator | `custom:local` | `hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (Ollama) | MoA aggregator only — standalone, not a routing tier |
+| aggregator | `custom:local` | `hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (Ollama) | MoA aggregator, same GGUF as parent — a different role, not a conflict |
 
-**DeepSeek is being removed from this build, repo-wide, on request (2026-09-28).**
-Every tier above except `parent` already moved off it: `fallback` (and the two
-heavy auxiliary slots that ride on it) reverted to `qwen/qwen3.5-122b-a10b`, the
-same id that tier ran before a DeepSeek was ever put there; the MoA reference
-model moved to the `nemotron-3-nano-omni-30b-a3b-reasoning` id `subagents`
-already uses; the MoA aggregator moved to a local 49B Nemotron GGUF specifically
-so it would NOT share a bucket with that same reference model (same-provider MoA
-self-grades, see `config.yaml`'s `moa:` comment). `parent` is the one entry left
-— every non-fabricated replacement found so far trades away something real (see
-`config.yaml`'s top-of-file comment for the specifics), so it's parked pending a
-decision rather than guessed at.
+**DeepSeek is fully removed from this build, repo-wide, on request (2026-09-28).**
+`fallback` (and the two heavy auxiliary slots that ride on it) reverted to
+`qwen/qwen3.5-122b-a10b`, the same id that tier ran before a DeepSeek was ever
+put there; the MoA reference model moved to the `nemotron-3-nano-omni-30b-a3b-reasoning`
+id `subagents` already uses; the MoA aggregator moved to a local 49B Nemotron
+GGUF specifically so it would NOT share a bucket with that same reference model
+(same-provider MoA self-grades, see `config.yaml`'s `moa:` comment). `parent`
+moved to that same local 49B GGUF, on request ("the current parent is the 49B
+Nemotron") — not a self-grading conflict with the aggregator sharing the same
+model, since parent and MoA aggregator are unrelated roles. The `hf-router`
+provider is removed entirely: it existed for exactly one reason (serving
+DeepSeek-V4-Pro as parent) and nothing else in this file ever used it.
+
+Moving the parent local also resolves what used to be an open question here:
+promoting any of the remaining CLOUD tiers to parent would have collapsed that
+tier's own bucket isolation (nvidia-nim with subagents, or-fallback with its
+auxiliary slots). Local has no rate-limit bucket to collapse.
 
 The `fallback` row compresses an ordered chain in `fallback_providers:`, two
 cloud links deep before the local last resort: **1)**
@@ -153,3 +159,5 @@ the files parse and agree with each other; it cannot prove behaviour.
 - Everything Claude Code — github.com/affaan-m/everything-claude-code
 - Cloudflare security-audit skill (MIT) — github.com/cloudflare/security-audit-skill
 - Codex CLI — github.com/openai/codex
+
+

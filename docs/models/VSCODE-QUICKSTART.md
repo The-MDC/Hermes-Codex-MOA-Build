@@ -6,13 +6,16 @@ The fast path. Gets the local floor model
 bring-up, including MCP servers, is `TAKEOVER.md`; this is the subset you need
 before any of that matters.
 
-**DeepSeek is being removed from this build, repo-wide, on request (2026-09-28).**
-This file used to be titled around it -- `fallback` below is now
-`qwen/qwen3.5-122b-a10b`, not a DeepSeek id. `parent` is the one tier where a
-replacement has not been decided yet (every non-fabricated candidate found so
-far trades away something real -- see `config.yaml`'s top-of-file comment); it
-still shows DeepSeek-V4-Pro below because that is what the repo copy of
-`config.yaml` still says, not because it's been re-confirmed as the plan.
+**DeepSeek is fully removed from this build, repo-wide, on request (2026-09-28).**
+This file used to be titled around it. `fallback` below is now
+`qwen/qwen3.5-122b-a10b`, not a DeepSeek id. `parent` moved off DeepSeek/hf-router
+too, on request ("the current parent is the 49B Nemotron") -- to the SAME local
+Ollama GGUF as the MoA aggregator (`hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL`).
+That changes this file's own "fast path" framing: the parent is no longer an
+API-only cloud tier, so this quickstart is not actually complete without that
+49B pulled too -- see the note at the end of §2 below. `HF_TOKEN` and the
+`hf-router` provider are gone entirely; nothing in this build needs a Hugging
+Face token anymore.
 
 Every step has a **success line**. A step is done when the output matches it —
 not when the command exits without complaining. That distinction is the whole
@@ -117,8 +120,24 @@ reasonably current Ollama; check `ollama --version` if the pull is rejected.
 a smaller download, and it now backs every slot below including `approval`.
 
 This one model already unblocks five of the eight auxiliary slots — routing,
-classification, tool selection, titles, curation. If you stop here you have a
-working floor.
+classification, tool selection, titles, curation.
+
+### 2.2 — Parent model (required, not optional)
+
+```powershell
+ollama pull hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL
+```
+
+Split GGUF, 2 files, ~58.68 GB combined -- an order of magnitude past the
+support model above. This is the parent as of 2026-09-28 ("the current parent
+is the 49B Nemotron") and also serves the MoA aggregator, same file, different
+role. Confirm real disk space and VRAM/RAM headroom before pulling -- this is
+not a "fast path" download in the way the 3.4 GB support model is.
+**Success:** `ollama list` shows the full tag above.
+
+If you only want the floor auxiliary slots working and don't need Hermes to
+actually converse yet, you can stop after 2.1 -- but the parent won't start
+without this model present, so §4's verification will fail on it.
 
 ## 3. Cloud tiers
 
@@ -140,19 +159,19 @@ the editor, never into a terminal**, so they do not land in shell history:
 
 ```
 NVIDIA_API_KEY=nvapi-...
-HF_TOKEN=hf_...
 OPENROUTER_API_KEY=sk-or-v1-...
 ```
 
 | key | from | serves |
 |---|---|---|
-| `HF_TOKEN` | huggingface.co/settings/tokens | **parent** — DeepSeek-V4-Pro, being replaced (not yet decided) |
 | `OPENROUTER_API_KEY` | openrouter.ai/keys | **fallback 2 + heavy aux** — Qwen3.5-122B-A10B |
 | `NVIDIA_API_KEY` | build.nvidia.com | **subagents + fallback 1 + MoA reference + vision** — nemotron-3-nano-omni-30b-a3b-reasoning |
 
-Only `NVIDIA_API_KEY` is strictly required for Hermes to start. Missing either
-other key makes that tier fail over silently rather than error, which is why
-step 4 checks them explicitly.
+No `HF_TOKEN` anymore -- the parent moved local (§2.2) and the `hf-router`
+provider it was the only thing serving is removed entirely.
+`NVIDIA_API_KEY` is strictly required for Hermes to start. Missing
+`OPENROUTER_API_KEY` makes that tier fail over silently rather than error,
+which is why step 4 checks it explicitly.
 
 **Optional fourth key**, only if you want Claude reachable from inside Hermes:
 
@@ -208,10 +227,9 @@ completion alone cannot tell a wrong model id from an exhausted quota, and those
 need opposite fixes.
 
 **This is the step that answers the one thing CI structurally cannot:** whether
-the parent's model (whatever `config.yaml` says once the DeepSeek replacement
-is decided) is actually served by its provider, and whether
-`qwen/qwen3.5-122b-a10b` is actually on OpenRouter. Neither is verifiable from
-the build container.
+Ollama actually has the parent's 49B GGUF loaded and serving (§2.2), and
+whether `qwen/qwen3.5-122b-a10b` is actually on OpenRouter. Neither is
+verifiable from the build container.
 
 Three outcomes, three different meanings:
 
@@ -230,21 +248,19 @@ replacement model is a design decision, not a retry.
 ## What you have at this point
 
 ```
-parent      hf-router     DeepSeek-V4-Pro          API only -- REPLACEMENT NOT YET DECIDED
+parent      local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL   Ollama, §2.2
 subagents   nvidia-nim    nemotron-3-nano-omni-30b-a3b-reasoning     API only
                           (also the MoA reference model)
 fallback    or-fallback   Qwen3.5-122B-A10B      API only, also 2 heavy aux slots
             (+ NVIDIA NIM, nemotron-3-nano-omni-30b-a3b-reasoning, as fallback_providers[0])
 floor       local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0
                           5 aux slots, offline-capable (swapped from hermes3:8b)
+aggregator  local         same 49B GGUF as parent, MoA aggregator role only
 ```
 
-**Not covered by the fast path above:** the MoA aggregator, a separate local
-pull of `hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (split
-GGUF, ~58.68 GB combined) via the same `ollama pull hf.co/...` pattern as step
-2.1. It only matters if you actually run `/moa`; skip it for the floor-only fast
-path this file promises. Confirm real disk/VRAM headroom before pulling it --
-it is an order of magnitude past the 3.4 GB floor model above.
+The 49B in §2.2 is not optional the way it used to look when it only served
+the MoA aggregator -- it is the parent now, so this quickstart's total
+download is the 3.4 GB floor model plus the ~58.68 GB 49B, not just the former.
 
 Not covered here, deliberately: the seven MCP servers, `hermes-council`'s
 dependency fault, and the Codex bridge handshake. None of them gate the model

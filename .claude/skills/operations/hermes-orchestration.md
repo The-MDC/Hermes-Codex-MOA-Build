@@ -16,7 +16,7 @@ nothing complained.
 
 | Tier | Provider key | Serves |
 |---|---|---|
-| parent | `custom:hf-router` | the conversation |
+| parent | `custom:local` | the conversation (moved off DeepSeek/hf-router 2026-09-28) |
 | subagents | `custom:nvidia-nim` | delegation, its own rate-limit bucket |
 | 429 fallback + heavy aux | `custom:or-fallback` | `compression`, `web_extract` |
 | floor | `custom:local` | 5 auxiliary slots, offline-capable |
@@ -32,8 +32,10 @@ Three structural rules hold it together. Break any one and it fails **silently**
 
 1. **Provider references must dodge `excluded_providers`.** `deepseek`, `openrouter`
    and `ollama` are all excluded, and exclusion matches every key a provider surfaces
-   under. That is why the entries are named `hf-router`, `or-fallback` and `local` —
-   an entry named after its own exclusion hides itself.
+   under. That is why the remaining entries are named `or-fallback` and `local` —
+   an entry named after its own exclusion hides itself. (There was an `hf-router`
+   entry too, exclusion-safe the same way; removed 2026-09-28 once DeepSeek, the
+   only thing it ever served, was gone.)
 2. **Subagents must not share the parent's provider**, or a fan-out eats the parent's
    bucket.
 3. **No auxiliary slot may sit on `auto`.** `auto` means "use the main model", which

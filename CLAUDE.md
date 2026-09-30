@@ -13,27 +13,27 @@ content, and the port fails if one survives into the output tree.
 ## The routing
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        BEING REMOVED, replacement not yet decided
+parent      custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  moved off DeepSeek/hf-router 2026-09-28
 subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation, also MoA reference
 fallback    custom:or-fallback   qwen/qwen3.5-122b-a10b             429 escape + 2 heavy aux
 floor       custom:local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)   offline, 5 aux slots
-aggregator  custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  MoA aggregator only, standalone
+aggregator  custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  same GGUF as parent, different role
 ```
 
-**DeepSeek is being removed from this build, repo-wide, on request (2026-09-28).**
-Every role above except `parent` already moved off it: `fallback` (and the two
-heavy auxiliary slots riding on it) reverted to `qwen/qwen3.5-122b-a10b`, the
-id that role ran before a DeepSeek was ever put there; the MoA reference model
-moved to `nemotron-3-nano-omni-30b-a3b-reasoning`; the MoA aggregator moved to
-a local 49B Nemotron GGUF specifically so it would not share a bucket with that
-same reference model (same-provider MoA self-grades — see the `moa:` comment in
-`config.yaml`). `parent` is the one entry left: every non-fabricated
-replacement found so far trades away something real (Kimi-K3 was already
-retired here for 429s/size; promoting nvidia-nim collapses the parent/subagents
-bucket isolation; promoting or-fallback collapses the parent/auxiliary
-isolation; the local 49B is a standalone model in this build, not a routing
-tier). See `config.yaml`'s top-of-file comment for the specifics — this is
-parked pending a decision, not guessed at.
+**DeepSeek is fully removed from this build, repo-wide, on request (2026-09-28).**
+`fallback` (and the two heavy auxiliary slots riding on it) reverted to
+`qwen/qwen3.5-122b-a10b`, the id that role ran before a DeepSeek was ever put
+there; the MoA reference model moved to `nemotron-3-nano-omni-30b-a3b-reasoning`;
+the MoA aggregator moved to a local 49B Nemotron GGUF specifically so it would
+not share a bucket with that same reference model (same-provider MoA
+self-grades — see the `moa:` comment in `config.yaml`). `parent` moved to that
+same local 49B GGUF, on request ("the current parent is the 49B Nemotron") —
+not a self-grading conflict with the aggregator: parent and MoA aggregator are
+unrelated roles, unlike reference-vs-aggregator. The `hf-router` provider is
+removed entirely; it existed for exactly one reason (serving DeepSeek-V4-Pro as
+parent) and nothing else in this file ever used it. Moving parent local also
+sidesteps what used to be an open question here: promoting any remaining cloud
+tier to parent would have collapsed that tier's own bucket isolation.
 
 **There is no local vision tier anymore.** `local-vl` (nemotron-nano-12b-v2-vl on
 llama.cpp :8080) was removed 2026-09-25 along with the old floor model

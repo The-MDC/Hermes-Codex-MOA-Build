@@ -33,15 +33,14 @@ Conflating them is the mistake this section exists to prevent.
 
 | | what it is | what it costs |
 |---|---|---|
-| `model.provider: openai-codex` | Hermes' own reasoning runs on a GPT-5.x model via ChatGPT/Codex OAuth, as an **inference provider** — a 5th entry next to nvidia-nim / hf-router / or-fallback / local | Draws the ChatGPT plan's rolling 5-hour usage window, from `~/.hermes/auth.json` |
+| `model.provider: openai-codex` | Hermes' own reasoning runs on a GPT-5.x model via ChatGPT/Codex OAuth, as an **inference provider** — an extra entry next to nvidia-nim / or-fallback / local | Draws the ChatGPT plan's rolling 5-hour usage window, from `~/.hermes/auth.json` |
 | the `codex` skill (`terminal` + `process`, `pty=true`) | Hermes shells out to the **Codex CLI** to do a bounded coding task, then reads the result back | Draws the **same** ChatGPT window, independently, from `~/.codex/auth.json` |
 
 Those two token files are not the same file, and neither side can see what the
-other has spent. Turn both on and you have two silent consumers of one quota — a
-compression pass or a title generation (routed to `custom:hf-router` for exactly
-this reason elsewhere in this config) suddenly has a cousin, and it is invisible
-until the plan's usage limit trips mid-task with no line in either transcript
-explaining why.
+other has spent. Turn both on and you have two silent consumers of one quota —
+some other slot in this config quietly gets a cousin consumer, and it is
+invisible until the plan's usage limit trips mid-task with no line in either
+transcript explaining why.
 
 **Decision: only the second one. `openai-codex` is excluded.**
 

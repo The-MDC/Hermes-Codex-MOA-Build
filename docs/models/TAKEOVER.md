@@ -3,8 +3,7 @@
 For whoever implements this next, running on the Windows box rather than in CI.
 Self-contained on purpose: you do not need to read another file in this repo to
 execute it. Context for *why* the stack is shaped this way is in
-`running-the-stack.md` and `handoff-2026-09-22.md`; you do not need either to
-follow the steps below.
+`handoff-2026-09-22.md`; you do not need it to follow the steps below.
 
 ## Division of labour
 
@@ -416,31 +415,32 @@ Five tests: one per tier, plus Codex delegation. Run them in order.
 
 ### Step 5.1 — Parent
 
-**DEEPSEEK IS BEING REMOVED FROM THIS BUILD (2026-09-28, on request, repo-wide)
-and `parent` is the one role that hasn't landed a replacement yet** — see
-`config.yaml`'s top-of-file comment and `HANDOFF-NEXT-SESSION.md` for the open
-options and why each has a real cost. Whatever `model.default` says in your
-installed `config.yaml` is the id to expect below, not necessarily DeepSeek.
+**DeepSeek is fully removed from this build (2026-09-28, on request, repo-wide),
+parent included** — the parent is now `custom:local` /
+`hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (Ollama),
+the same GGUF as the MoA aggregator, a different role. Requires that model
+actually pulled in Ollama first (~58.68 GB, split GGUF) — see the `local`
+provider's comment in `config.yaml` for the pull command, and confirm real
+VRAM/RAM headroom before trusting this step: this model is now on the hot path
+for every turn, not an occasional MoA synthesis call.
 
 ```powershell
 hermes --print "Reply with exactly: parent-ok"
 ```
 
 **Success:** `parent-ok`, and `hermes` reports the model as whatever
-`model.default` in `config.yaml` currently names.
+`model.default` in `config.yaml` currently names (the 49B GGUF above, unless
+that's changed since).
 
-**ESCALATE** if it answers on a different model than that. While the parent was
-still DeepSeek-V4-Pro, this was checked directly: the HF router serves it
-through four live inference providers (novita, featherless-ai, deepinfra,
-baseten), so router coverage was never the failure mode there. Kept as a
-reminder that "does the router even carry this model" is a real, checkable
-question for whatever id replaces it, not just for DeepSeek.
-
-So a different model here means something else — a silent substitution by the
-router, a `discover_models` regression that unpinned the picker, or the parent
-falling through to `fallback_providers` because the relevant key is absent or
-spent. `hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
-*returned* alongside the one requested.
+**ESCALATE** if it answers on a different model than that. This could mean a
+`discover_models` regression that unpinned the picker, the 49B GGUF not
+actually present in Ollama (falls through to `fallback_providers` instead), or
+the parent falling through because a required cloud key is absent or spent.
+`hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
+*returned* alongside the one requested. (While the parent was still
+DeepSeek-V4-Pro on the now-removed hf-router, this same step confirmed the HF
+router served it through four live inference providers — kept as a reminder
+that router/local coverage is always worth checking directly, not assumed.)
 
 ### Step 5.2 — Delegation
 
