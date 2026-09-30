@@ -289,8 +289,17 @@ jobs:
               prov = cfg.get("provider", "auto")
               assert prov != "auto", \
                   f"auxiliary.{task} is on auto, which routes it to the main model and the parent bucket"
-              assert prov != parent_provider, \
-                  f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
+              # `custom:local` is exempt from the bucket-collision rule below. That
+              # rule protects a metered, RPM-limited CLOUD bucket from a side job
+              # stealing the parent's quota, and Ollama has no RPM quota to steal.
+              # Sharing `custom:local` with the parent is a DIFFERENT, real cost --
+              # VRAM/compute contention between whatever's resident there (as of
+              # 2026-09-28, a 49B parent alongside the 3B floor auxiliary slots) --
+              # just not the failure this specific assertion exists to catch, and
+              # not a reason to weaken it for every other provider too.
+              if prov != "custom:local":
+                  assert prov != parent_provider, \
+                      f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
               assert cfg.get("model"), f"auxiliary.{task} names a provider but no model"
 
           # Every provider REFERENCE must resolve to something that can actually
