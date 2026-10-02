@@ -128,7 +128,7 @@ moa:
     description: 4B vision-language content-safety moderator, 12 languages, custom policies, prompt/response classification
   - name: Review-Vision-Quantum-Model
     quant: Q4_K_M
-    role: support_expert_1
+    role: support_expert_1/reviewer
     description: 6-bit quantized model providing multimodal/coding support for CodeLlama & Qwythos, parallel multimodal/coding lane
   - name: jevify-q6k-gguf-multimodal-coding
     quant: Q6_K
