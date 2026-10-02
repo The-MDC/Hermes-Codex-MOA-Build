@@ -114,39 +114,30 @@ moa:
     role: primary_moe
     description: '180B Mixture-of-Experts with 512 experts, #1 on AIME 2026/HMMT/GPQA/MMLU-Pro/MMMU-Pro,
       vision-language, self-improving'
-  - name: Darwin-35B-Nemotron-Lightning-A3B
+  - name: Nemotron-Lightning-A3B
     quant: Q4_K_M
-    role: secondary_generator
+    role: base_generator
     description: 30B Mixture-of-Experts (3B active) with hybrid Mamba-2/MoE architecture, optimized for coding, mathematical reasoning, and scientific analysis. NVIDIA Nemotron 3.5 Lightning, NIM-deployed. Succeeds Darwin-35B-A3B-Mythos (Qwen3.6-based) with improved agentic capabilities.
   - name: Nemotron-3.5-Base-8B-Instruct
     quant: Q4_K_M
-    role: base_generator
+    role: instruct
     description: 8B dense instruct model from Nemotron 3.5 family, NIM-deployed, general-purpose text generation and agent orchestration support.
-
-
-
-
-
   - name: Nemotron-3.5-Content-Safety
     quant: Q4_K_M
     role: guard
-    description: 4B vision-language content-safety moderator, 12 languages, custom
-      policies, prompt/response classification
-    description: 4B vision-language content-safety moderator, 12 languages, custom
-      policies, prompt/response classification
-    description: 4B vision-language content-safety moderator, 12 languages, custom
-      policies, prompt/response classification
-      minimal censorship
+    description: 4B vision-language content-safety moderator, 12 languages, custom policies, prompt/response classification
   - name: Review-Vision-Quantum-Model
     quant: Q4_K_M
-    description: 6-bit quantized model providing multimodal/coding support for CodeLlama
-      & Qwythos, parallel multimodal/coding lane
+    role: support_expert_1
+    description: 6-bit quantized model providing multimodal/coding support for CodeLlama & Qwythos, parallel multimodal/coding lane
+  - name: jevify-q6k-gguf-multimodal-coding
+    quant: Q6_K
+    role: support_expert_1
+    description: 6-bit quantized model serving as first expert in parallel multimodal/coding lane, dual-expert MoE architecture
   - name: jevify-q6k-gguf-second-support
     quant: Q6_K
     role: support_expert_2
-    description: 6-bit quantized model serving as second support expert in parallel
-      multimodal/coding lane, dual-expert MoE architecture
-web:
+    description: 6-bit quantized model serving as second support expert in parallel multimodal/coding lane, dual-expert MoE architecture
   search_backend: searxng
   extract_backend: firecrawl
 excluded_providers:
