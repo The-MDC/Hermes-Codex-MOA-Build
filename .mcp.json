@@ -38,20 +38,42 @@
     "hermes": {
       "command": "hermes",
       "args": [
-        "mcp",
-        "serve"
+        "${HERMES_SKILLS_SERVER}"
       ],
-      "description": "Hermes Agent \u2014 messaging bridge across 30+ platforms (stdio, requires hermes on PATH)"
+      "tools": [
+        "list_skills",
+        "get_skill",
+        "search_skills"
+      ]
     },
-    "crawl4ai": {
-      "type": "sse",
-      "url": "http://127.0.0.1:11235/mcp/sse"
+    "hermes-council": {
+      "command": "${HERMES_COUNCIL_LAUNCHER}",
+      "args": [],
+      "tools": [
+        "council_review",
+        "council_perspectives"
+      ]
     },
-    "atomicmemory": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@atomicmemory/mcp-server"
+    "codex-mcp": {
+      "command": "${HERMES_CODEX_LAUNCHER}",
+      "args": [],
+      "tools": [
+        "codex_exec",
+        "codex_status"
+      ]
+    },
+    "cloudflare": {
+      "url": "https://mcp.cloudflare.com/mcp",
+      "tools": [
+        "workers_list",
+        "workers_get",
+        "kv_list"
+      ]
+    },
+    "submcp": {
+      "url": "https://mcp.submcp.com/mcp",
+      "tools": [
+        "unfiltered: true"
       ]
     }
   }
