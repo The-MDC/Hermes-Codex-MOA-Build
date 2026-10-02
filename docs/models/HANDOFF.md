@@ -84,9 +84,9 @@ bootstrap — B2 and B3 below are retired.
 This step, and B3 below, downloaded and served `nemotron-nano-12b-v2-vl` via a
 second local server (`local-vl`, llama.cpp on :8080). That tier is gone from
 `config.yaml` entirely, on request ("remove hermes 8B and the 12b"), and `vision`
-now routes to the cloud (`custom:or-fallback` / `deepseek/deepseek-v4.1-flash`) —
-the same route it used before this tier ever existed. Nothing to download or
-serve here anymore. Skip straight to B4.
+now routes to the cloud — `custom:nvidia-nim` / `nvidia/ising-calibration-1.5-31b`
+as of 2026-09-27 (it briefly routed through `custom:or-fallback` first). Nothing
+to download or serve here anymore. Skip straight to B4.
 
 ### B3. llama.cpp, and serve it · RETIRED 2026-09-25
 

@@ -33,15 +33,14 @@ Conflating them is the mistake this section exists to prevent.
 
 | | what it is | what it costs |
 |---|---|---|
-| `model.provider: openai-codex` | Hermes' own reasoning runs on a GPT-5.x model via ChatGPT/Codex OAuth, as an **inference provider** — a 5th entry next to nvidia-nim / hf-router / or-fallback / local | Draws the ChatGPT plan's rolling 5-hour usage window, from `~/.hermes/auth.json` |
+| `model.provider: openai-codex` | Hermes' own reasoning runs on a GPT-5.x model via ChatGPT/Codex OAuth, as an **inference provider** — an extra entry next to nvidia-nim / or-fallback / local | Draws the ChatGPT plan's rolling 5-hour usage window, from `~/.hermes/auth.json` |
 | the `codex` skill (`terminal` + `process`, `pty=true`) | Hermes shells out to the **Codex CLI** to do a bounded coding task, then reads the result back | Draws the **same** ChatGPT window, independently, from `~/.codex/auth.json` |
 
 Those two token files are not the same file, and neither side can see what the
-other has spent. Turn both on and you have two silent consumers of one quota — a
-compression pass or a title generation (routed to `custom:hf-router` for exactly
-this reason elsewhere in this config) suddenly has a cousin, and it is invisible
-until the plan's usage limit trips mid-task with no line in either transcript
-explaining why.
+other has spent. Turn both on and you have two silent consumers of one quota —
+some other slot in this config quietly gets a cousin consumer, and it is
+invisible until the plan's usage limit trips mid-task with no line in either
+transcript explaining why.
 
 **Decision: only the second one. `openai-codex` is excluded.**
 
@@ -59,10 +58,12 @@ this same file already depends on its credentials meaning one thing." CI asserts
 the entry stays present, the same way it asserts `or-fallback` never collides with
 its own exclusion.
 
-The trade being made explicitly: Hermes' main reasoning stays on its own parent tier (DeepSeek-V4-Pro as of 2026-09-22; Kimi-K3 when this was written), not GPT-5.x,
-even though the ChatGPT plan's usage window is separately available and arguably
-"free" at the margin. Revisit only if the request-budget picture changes enough to
-justify a fifth entry in a picker this repo just fought to pin at four.
+The trade being made explicitly: Hermes' main reasoning stays on its own parent tier (DeepSeek-V4-Pro as of 2026-09-22; Kimi-K3 when this was written; DeepSeek itself
+being removed as of 2026-09-28, replacement not yet decided — see
+`HANDOFF-NEXT-SESSION.md`), not GPT-5.x, even though the ChatGPT plan's usage
+window is separately available and arguably "free" at the margin. Revisit only
+if the request-budget picture changes enough to justify a fifth entry in a
+picker this repo just fought to pin at four.
 
 ## When the handoff is the obvious sense
 

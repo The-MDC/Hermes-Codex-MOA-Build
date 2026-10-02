@@ -102,10 +102,12 @@ via a second local server (`local-vl`, llama.cpp on :8080) — the VL runner the
 old Division of Labour section described. That tier is gone from
 `config.yaml` entirely, on request ("remove hermes 8B and the 12b").
 
-`vision` now routes to the cloud: `custom:or-fallback` / `deepseek/deepseek-v4.1-flash`,
-the same route it used before this tier ever existed and the one-line revert
-this file always documented as the alternative to running a second local
-service. Nothing to download, build, or serve here anymore.
+`vision` routed to the cloud after that -- first `custom:or-fallback` /
+`deepseek/deepseek-v4.1-flash` (the one-line revert this file always documented
+as the alternative to running a second local service), then moved again
+2026-09-27 to `custom:nvidia-nim` / `nvidia/ising-calibration-1.5-31b`, which is
+where it lives now. Nothing to download, build, or serve here anymore either
+way.
 
 The reasoning this step used to carry — why Ollama can't be trusted with a
 VL GGUF's separate `mmproj` projector, the exact llama.cpp build floor and the
@@ -117,9 +119,8 @@ Phase 2.
 ### Step 1.4 — RETIRED 2026-09-25 · was "Prove the VL model SEES and CALLS TOOLS"
 
 Retired along with Step 1.3 above — there is no local vision model left to
-probe. `vision`'s cloud route (DeepSeek-V4.1-Flash) is natively multimodal and
-was verified as this slot's fix before the VL tier ever existed; nothing new
-to prove here.
+probe. `vision`'s current cloud route (`nvidia/ising-calibration-1.5-31b` on
+NVIDIA NIM) is natively multimodal; nothing new to prove here.
 
 ---
 
@@ -414,24 +415,32 @@ Five tests: one per tier, plus Codex delegation. Run them in order.
 
 ### Step 5.1 — Parent
 
+**DeepSeek is fully removed from this build (2026-09-28, on request, repo-wide),
+parent included** — the parent is now `custom:local` /
+`hf.co/unsloth/Llama-3_3-Nemotron-Super-49B-v1_5-GGUF:UD-Q8_K_XL` (Ollama),
+the same GGUF as the MoA aggregator, a different role. Requires that model
+actually pulled in Ollama first (~58.68 GB, split GGUF) — see the `local`
+provider's comment in `config.yaml` for the pull command, and confirm real
+VRAM/RAM headroom before trusting this step: this model is now on the hot path
+for every turn, not an occasional MoA synthesis call.
+
 ```powershell
 hermes --print "Reply with exactly: parent-ok"
 ```
 
-**Success:** `parent-ok`, and `hermes` reports the model as
-`deepseek-ai/DeepSeek-V4-Pro`.
+**Success:** `parent-ok`, and `hermes` reports the model as whatever
+`model.default` in `config.yaml` currently names (the 49B GGUF above, unless
+that's changed since).
 
-**ESCALATE** if it answers on a different model — but **not** for the reason this
-step used to give. It said the likely cause was the HF router not serving a 1.6T
-model, and that has since been checked: the router serves
-`deepseek-ai/DeepSeek-V4-Pro` through four live inference providers (novita,
-featherless-ai, deepinfra, baseten). Coverage is not the problem.
-
-So a different model here means something else — a silent substitution by the
-router, a `discover_models` regression that unpinned the picker, or the parent
-falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
+**ESCALATE** if it answers on a different model than that. This could mean a
+`discover_models` regression that unpinned the picker, the 49B GGUF not
+actually present in Ollama (falls through to `fallback_providers` instead), or
+the parent falling through because a required cloud key is absent or spent.
 `hermes-verify.ps1 -Deep` separates those: it prints the id the endpoint
-*returned* alongside the one requested.
+*returned* alongside the one requested. (While the parent was still
+DeepSeek-V4-Pro on the now-removed hf-router, this same step confirmed the HF
+router served it through four live inference providers — kept as a reminder
+that router/local coverage is always worth checking directly, not assumed.)
 
 ### Step 5.2 — Delegation
 
@@ -439,10 +448,11 @@ falling through to `fallback_providers` because `HF_TOKEN` is absent or spent.
 hermes --print "Delegate to a subagent: have it reply with exactly subagent-ok"
 ```
 
-**Success:** `subagent-ok`. Subagents must run on `nvidia/llama-3.3-nemotron-super-49b-v1.5`
-(swapped from `nemotron-3-super-120b-a12b` 2026-09-25), a different provider from
-the parent. Same provider on both means the split collapsed and the parent's
-bucket is being spent twice.
+**Success:** `subagent-ok`. Subagents must run on `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning`
+(swapped 2026-09-27 from `nvidia/llama-3.3-nemotron-super-49b-v1.5` — confirmed
+dead, HTTP 410, EOL 2026-08-26 — itself swapped from `nemotron-3-super-120b-a12b`
+2026-09-25), a different provider from the parent. Same provider on both means the
+split collapsed and the parent's bucket is being spent twice.
 
 ### Step 5.3 — Tool call through Hermes
 

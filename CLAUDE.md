@@ -13,42 +13,62 @@ content, and the port fails if one survives into the output tree.
 ## The routing
 
 ```
-parent      custom:hf-router     deepseek-ai/DeepSeek-V4-Pro        1.6T (49B active), 1M ctx
-subagents   custom:nvidia-nim    nvidia/llama-3.3-nemotron-super-49b-v1.5  high-compute delegation
-fallback    custom:or-fallback   deepseek/deepseek-v4.1-flash       429 escape + 2 heavy aux
+parent      custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  moved off DeepSeek/hf-router 2026-09-28
+subagents   custom:nvidia-nim    nvidia/nemotron-3-nano-omni-30b-a3b-reasoning  high-compute delegation, also MoA reference
+fallback    custom:or-fallback   qwen/qwen3.5-122b-a10b             429 escape + 2 heavy aux
 floor       custom:local         Hermes-3-Llama-3.2-3B-abliterated:Q8_0 (Ollama)   offline, 5 aux slots
+aggregator  custom:local         Llama-3.3-Nemotron-Super-49B-v1.5, UD-Q8_K_XL (Ollama)  same GGUF as parent, different role
 ```
+
+**DeepSeek is fully removed from this build, repo-wide, on request (2026-09-28).**
+`fallback` (and the two heavy auxiliary slots riding on it) reverted to
+`qwen/qwen3.5-122b-a10b`, the id that role ran before a DeepSeek was ever put
+there; the MoA reference model moved to `nemotron-3-nano-omni-30b-a3b-reasoning`;
+the MoA aggregator moved to a local 49B Nemotron GGUF specifically so it would
+not share a bucket with that same reference model (same-provider MoA
+self-grades — see the `moa:` comment in `config.yaml`). `parent` moved to that
+same local 49B GGUF, on request ("the current parent is the 49B Nemotron") —
+not a self-grading conflict with the aggregator: parent and MoA aggregator are
+unrelated roles, unlike reference-vs-aggregator. The `hf-router` provider is
+removed entirely; it existed for exactly one reason (serving DeepSeek-V4-Pro as
+parent) and nothing else in this file ever used it. Moving parent local also
+sidesteps what used to be an open question here: promoting any remaining cloud
+tier to parent would have collapsed that tier's own bucket isolation.
 
 **There is no local vision tier anymore.** `local-vl` (nemotron-nano-12b-v2-vl on
 llama.cpp :8080) was removed 2026-09-25 along with the old floor model
-(hermes3:8b), on request. `vision` now routes to `custom:or-fallback`
-(DeepSeek-V4.1-Flash, cloud) instead — same as before the local-vl tier ever
-existed. The new floor model is Llama-3.2-based and text-only, so this wasn't a
-side effect of the swap: there was never a vision-capable replacement on offer.
+(hermes3:8b), on request. `vision` now routes to `custom:nvidia-nim`
+(`nvidia/ising-calibration-1.5-31b`, cloud) instead, moved there 2026-09-27 off
+an earlier or-fallback/DeepSeek revert of the same slot. The floor model is
+Llama-3.2-based and text-only, so none of this was a side effect of any swap:
+there was never a vision-capable replacement on the laptop tier.
 
 This diagram lists ROLES, not every provider. `anthropic-direct` (claude-sonnet-5,
 Anthropic's OpenAI-compatible endpoint) exists in `providers:` and is deliberately
-wired into none of the five roles above — reachable only via
+wired into none of the roles above — reachable only via
 `/model custom:anthropic-direct:claude-sonnet-5`. See the comment on that entry and
 on the MoA `aggregator:` block for why it was kept out.
 
 `fallback_providers:` is an ordered chain, not a single role — the table's one
-`fallback` row is now two links deep. As of 2026-09-25: **fallback 1** is
-`nvidia/llama-3.3-nemotron-super-49b-v1.5` on NVIDIA NIM (cloud-hosted, same
+`fallback` row is now two links deep. **Fallback 1** is
+`nvidia/nemotron-3-nano-omni-30b-a3b-reasoning` on NVIDIA NIM (cloud-hosted, same
 bucket `nvidia-nim` already spends on subagents — a fallback firing there now
-competes with delegation traffic); **fallback 2** is the DeepSeek entry the table
-still shows; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
-remains last resort, unchanged in role. That NIM model id was NOT live-verified
-from this repo's sandbox (build.nvidia.com and docs.api.nvidia.com are both
-egress-blocked there) — see the comment on the entry itself in `config.yaml` for
-the triangulation and the exact command to self-verify it.
+competes with delegation traffic); **fallback 2** is `qwen/qwen3.5-122b-a10b`,
+matching the table above; the local floor model (Hermes-3-Llama-3.2-3B-abliterated:Q8_0)
+remains last resort, unchanged in role.
 
-**Nemotron-3-Super-120B-A12B is retired from this file, on request (2026-09-25).**
-The `nvidia-nim` provider's `default_model`, `delegation:`, and the MoA
-`aggregator:` all now point at the same 49B model as the fallback entry above —
-subagents and fallback 1 are no longer diversified by model size, only by which
-failure each answers (the parent going down, vs. delegation routing). No
-reference to the 120B model remains anywhere in `config.yaml`.
+**The id above is a 2026-09-27 replacement for a dead model, not the original
+choice.** `nvidia/llama-3.3-nemotron-super-49b-v1.5` (added 2026-09-25, replacing
+Nemotron-3-Super-120B-A12B) was never live-verified from this sandbox — this
+repo's own egress proxy blocks `build.nvidia.com`/`docs.api.nvidia.com` — and was
+instead "triangulated" against three NIM resellers. That triangulation was wrong:
+a real Hermes session on this NIM account hit the id live via `/moa` and got back
+HTTP 410 Gone, end-of-life 2026-08-26 — a month before the triangulation was
+trusted. The replacement was live-verified the way that matters: it actually
+answered, on this account, the same day it replaced the dead id. See the comment
+on the `nvidia-nim` provider entry in `config.yaml` for the full story, and run
+`bash scripts/nim-preflight.sh --list | grep -i nemotron` after any future swap
+here — that command would have caught this immediately.
 
 Three rules that have each cost a session here:
 

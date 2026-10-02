@@ -23,14 +23,15 @@ nothing complained.
 
 | Tier | Provider key | Serves |
 |---|---|---|
-| parent | `custom:hf-router` | the conversation |
+| parent | `custom:local` | the conversation (moved off DeepSeek/hf-router 2026-09-28) |
 | subagents | `custom:nvidia-nim` | delegation, its own rate-limit bucket |
 | 429 fallback + heavy aux | `custom:or-fallback` | `compression`, `web_extract` |
 | floor | `custom:local` | 5 auxiliary slots, offline-capable |
 
 `vision` used to be its own tier (`custom:local-vl`, llama-server :8080). Retired
 2026-09-25 along with the old floor model (hermes3:8b) — `vision` now routes to
-`custom:or-fallback` (cloud), and the floor is a single, smaller Ollama tag
+`custom:nvidia-nim` (cloud, moved there 2026-09-27 after briefly sitting on
+`custom:or-fallback`), and the floor is a single, smaller Ollama tag
 (`hf.co/mradermacher/Hermes-3-Llama-3.2-3B-abliterated-GGUF:Q8_0`, pulled via
 Ollama's own hf.co/ feature, no second local service).
 
@@ -38,8 +39,10 @@ Three structural rules hold it together. Break any one and it fails **silently**
 
 1. **Provider references must dodge `excluded_providers`.** `deepseek`, `openrouter`
    and `ollama` are all excluded, and exclusion matches every key a provider surfaces
-   under. That is why the entries are named `hf-router`, `or-fallback` and `local` —
-   an entry named after its own exclusion hides itself.
+   under. That is why the remaining entries are named `or-fallback` and `local` —
+   an entry named after its own exclusion hides itself. (There was an `hf-router`
+   entry too, exclusion-safe the same way; removed 2026-09-28 once DeepSeek, the
+   only thing it ever served, was gone.)
 2. **Subagents must not share the parent's provider**, or a fan-out eats the parent's
    bucket.
 3. **No auxiliary slot may sit on `auto`.** `auto` means "use the main model", which

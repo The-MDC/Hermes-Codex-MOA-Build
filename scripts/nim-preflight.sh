@@ -47,7 +47,10 @@ bad()  { printf '  %sFAIL%s  %s\n' "$RED" "$RST" "$*"; FAILED=$((FAILED+1)); }
 hdr()  { [ "$QUIET" = 1 ] || printf '\n%s%s%s\n' "$DIM" "$*" "$RST"; }
 
 NIM_BASE="${NVIDIA_NIM_BASE_URL:-https://integrate.api.nvidia.com/v1}"
-NIM_MODEL="${NVIDIA_NIM_MODEL:-nvidia/llama-3.3-nemotron-super-49b-v1.5}"
+# nvidia/llama-3.3-nemotron-super-49b-v1.5 confirmed DEAD 2026-09-27 (HTTP 410,
+# EOL 2026-08-26) -- swapped to nvidia/nemotron-3-nano-omni-30b-a3b-reasoning,
+# live-verified on this account the same day.
+NIM_MODEL="${NVIDIA_NIM_MODEL:-nvidia/nemotron-3-nano-omni-30b-a3b-reasoning}"
 HF_BASE="${HF_ROUTER_BASE_URL:-https://router.huggingface.co/v1}"
 OR_BASE="${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}"
 LOCAL_BASE="${LOCAL_MODEL_BASE_URL:-http://127.0.0.1:11434/v1}"
