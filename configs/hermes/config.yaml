@@ -1,0 +1,313 @@
+providers:
+  hf-router:
+    name: Hugging Face Inference Providers
+    api: https://router.huggingface.co/v1
+    key_env: HF_TOKEN
+    transport: chat_completions
+    default_model: deepseek-ai/DeepSeek-V4-Pro
+    models:
+    - deepseek-ai/DeepSeek-V4-Pro
+    discover_models: false
+    context_length: 262144
+  nvidia-nim:
+    name: NVIDIA NIM (build.nvidia.com)
+    api: https://integrate.api.nvidia.com/v1
+    key_env: NVIDIA_API_KEY
+    transport: chat_completions
+    default_model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+    models:
+    - nvidia/llama-3.3-nemotron-super-49b-v1.5
+    discover_models: false
+    context_length: 131072
+  or-fallback:
+    name: OpenRouter
+    api: https://openrouter.ai/api/v1
+    key_env: OPENROUTER_API_KEY
+    transport: chat_completions
+    default_model: deepseek/deepseek-v4.1-flash
+    models:
+    - deepseek/deepseek-v4.1-flash
+    discover_models: false
+    context_length: 262144
+  local:
+    name: Ollama (this machine)
+    api: http://127.0.0.1:11434/v1
+    api_key: no-key-required
+    transport: chat_completions
+    default_model:
+    - model
+    models:
+    - hermes3:8b
+    discover_models: false
+    context_length: 32768
+  local-vl:
+    name: llama.cpp (this machine, vision)
+    api: http://127.0.0.1:8080/v1
+    api_key: no-key-required
+    transport: chat_completions
+    default_model: nemotron-nano-12b-v2-vl
+    models:
+    - nemotron-nano-12b-v2-vl
+    discover_models: false
+    context_length: 16384
+  anthropic-direct:
+orc_a:
+  name: ORCA (stably.ai)
+  api: https://api.stability.ai/v1
+  key_env: ORCA_API_KEY
+  transport: chat_completions
+  default_model: stablyai/orca
+  models:
+  - stablyai/orca
+  discover_models: false
+  context_length: 32768
+    name: Anthropic (OpenAI-compatible endpoint)
+    api: https://api.anthropic.com/v1
+    key_env: ANTHROPIC_API_KEY
+    transport: chat_completions
+    default_model: claude-sonnet-5
+    models:
+    - claude-sonnet-5
+    discover_models: false
+    context_length: 200000
+model:
+  provider: custom:hf-router
+  default: deepseek-ai/DeepSeek-V4-Pro
+  temperature: 1.0
+  top_p: 1.0
+fallback_providers:
+- provider: custom
+  model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+  base_url: https://integrate.api.nvidia.com/v1
+  key_env: NVIDIA_API_KEY
+- provider: custom
+  model: deepseek/deepseek-v4.1-flash
+  base_url: https://openrouter.ai/api/v1
+  key_env: OPENROUTER_API_KEY
+- provider: custom
+  model:
+  - model
+  base_url: http://127.0.0.1:11434/v1
+  api_key: no-key-required
+delegation:
+  provider: custom:nvidia-nim
+  model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+  max_concurrent_children: 3
+  fallback_providers: []
+moa:
+  reference_models:
+  - provider: custom:hf-router
+    model: deepseek-ai/DeepSeek-V4-Pro
+    enabled: true
+  aggregator:
+    provider: custom:nvidia-nim
+    model: nvidia/llama-3.3-nemotron-super-49b-v1.5
+  presets:
+    default:
+      reference_models:
+      - provider: custom:hf-router
+        model: deepseek-ai/DeepSeek-V4-Pro
+        enabled: true
+  tier1:
+  - name: Darwin-180B-RSI
+    quant: FP16
+    role: primary_moe
+    description: '180B Mixture-of-Experts with 512 experts, #1 on AIME 2026/HMMT/GPQA/MMLU-Pro/MMMU-Pro,
+      vision-language, self-improving'
+  - name: Darwin-35B-Nemotron-Lightning-A3B
+    quant: Q4_K_M
+    role: secondary_generator
+    description: 30B Mixture-of-Experts (3B active) with hybrid Mamba-2/MoE architecture, optimized for coding, mathematical reasoning, and scientific analysis. NVIDIA Nemotron 3.5 Lightning, NIM-deployed. Succeeds Darwin-35B-A3B-Mythos (Qwen3.6-based) with improved agentic capabilities.
+  - name: Nemotron-3.5-Base-8B-Instruct
+    quant: Q4_K_M
+    role: base_generator
+    description: 8B dense instruct model from Nemotron 3.5 family, NIM-deployed, general-purpose text generation and agent orchestration support.
+
+
+
+
+
+  - name: Nemotron-3.5-Content-Safety
+    quant: Q4_K_M
+    role: guard
+    description: 4B vision-language content-safety moderator, 12 languages, custom
+      policies, prompt/response classification
+    description: 4B vision-language content-safety moderator, 12 languages, custom
+      policies, prompt/response classification
+    description: 4B vision-language content-safety moderator, 12 languages, custom
+      policies, prompt/response classification
+      minimal censorship
+  - name: Review-Vision-Quantum-Model
+    quant: Q4_K_M
+    description: 6-bit quantized model providing multimodal/coding support for CodeLlama
+      & Qwythos, parallel multimodal/coding lane
+  - name: jevify-q6k-gguf-second-support
+    quant: Q6_K
+    role: support_expert_2
+    description: 6-bit quantized model serving as second support expert in parallel
+      multimodal/coding lane, dual-expert MoE architecture
+web:
+  search_backend: searxng
+  extract_backend: firecrawl
+excluded_providers:
+- openrouter
+- anthropic
+- openai
+- openai-codex
+- codex
+- copilot
+- google
+- gemini
+- google-gemini
+- google-ai-studio
+- vertex
+- google-vertex
+- vertex-ai
+- mistral
+- deepseek
+- groq
+- cerebras
+- xai
+- minimax
+- ollama
+- lmstudio
+- nous
+- deepinfra
+- bedrock
+- together
+- fireworks
+- perplexity
+- moonshot
+- qwen
+- cohere
+- novita
+- nebius
+- azure
+tts:
+  provider: voicebox
+stt:
+  provider: voicebox
+mcp_servers:
+  voicebox:
+    url: http://127.0.0.1:17493/mcp
+    tools:
+      unfiltered: true
+  crawl4ai:
+    url: http://127.0.0.1:11235/mcp/sse
+    tools:
+      include:
+      - crawl
+      - scrape
+  atomicmemory:
+    command: npx
+    args:
+    - -y
+    - '@atomicmemory/mcp-server'
+    tools:
+      include:
+      - store_memory
+      - search_memory
+      - list_memories
+  hermes-skills:
+    command: node
+    args:
+    - ${HERMES_SKILLS_SERVER}
+    tools:
+      include:
+      - list_skills
+      - get_skill
+      - search_skills
+  hermes-council:
+    command: ${HERMES_COUNCIL_LAUNCHER}
+    args: []
+    tools:
+      include:
+      - council_review
+      - council_perspectives
+  codex-mcp:
+    command: ${HERMES_CODEX_LAUNCHER}
+    args: []
+    tools:
+      include:
+      - codex_exec
+      - codex_status
+  cloudflare:
+    url: https://mcp.cloudflare.com/mcp
+    tools:
+      include:
+      - workers_list
+      - workers_get
+      - kv_list
+  submcp:
+    url: https://mcp.submcp.com/mcp
+    tools:
+      unfiltered: true
+auxiliary:
+  compression:
+    provider: custom:or-fallback
+    model: deepseek/deepseek-v4.1-flash
+  web_extract:
+    provider: custom:or-fallback
+    model: deepseek/deepseek-v4.1-flash
+  vision:
+    provider: custom:local-vl
+    model: nemotron-nano-12b-v2-vl
+  title_generation:
+    provider: custom:local
+    model:
+    - model
+    prefer_fast_model: true
+  approval:
+    provider: custom:local
+    model:
+    - model
+  mcp:
+    provider: custom:local
+    model:
+    - model
+  skills_hub:
+    provider: custom:local
+    model:
+    - model
+  curator:
+    provider: custom:local
+    model:
+    - model
+code_execution:
+  mode: project
+  timeout: 300
+  max_tool_calls: 50
+compression:
+  enabled: true
+  threshold: 0.5
+  model_thresholds:
+    DeepSeek-V4-Pro: 0.7
+  target_ratio: 0.2
+  tail_mode: lean
+  protect_last_n: 20
+context:
+  engine: compressor
+credential_pool_strategies:
+  hf-router: fill_first
+  nvidia-nim: fill_first
+  or-fallback: fill_first
+provider_routing:
+  sort: throughput
+  require_parameters: true
+  data_collection: deny
+prompt_caching:
+  cache_ttl: 1h
+tool_loop_guardrails:
+  warnings_enabled: true
+  hard_stop_enabled: false
+  non_interactive_hard_stop_enabled: true
+  warn_after:
+    exact_failure: 2
+    same_tool_failure: 3
+    idempotent_no_progress: 2
+  hard_stop_after:
+    exact_failure: 5
+    same_tool_failure: 8
+    idempotent_no_progress: 5
+skills:
+  creation_nudge_interval: 15

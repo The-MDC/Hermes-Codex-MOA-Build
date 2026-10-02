@@ -1,0 +1,471 @@
+# Harness checks.
+#
+# WHY THIS EXISTS
+#     Two reasons, and the second one is not obvious.
+#
+#     1. It gates the checks this repo ships: syntax on every script, and the Hermes
+#        config's routing invariants, which fail silently on the desktop rather than
+#        erroring. A canonical-numbers gate also lived here and was removed with the
+#        owner's explicit approval — the numbers remain canonical and CLAUDE.md
+#        remains their declaration, but agreement is now a human review step in
+#        .github/PULL_REQUEST_TEMPLATE.md rather than a CI failure. The gate scanned
+#        every restatement in the tree, so an unrelated PR that merely reworded a
+#        sentence near a number could paint CI red.
+#
+#     2. It gives CodeQL's `actions` extractor something to extract. Code scanning
+#        default setup has the `actions` language enabled for this repository, and on a
+#        pull request the analysis is diff-informed: it looks at the files this PR
+#        changes, not the whole tree. This PR's first commit added .github/ content that
+#        contains no workflow — a PR template — so the actions extractor had nothing in
+#        the diff range it could parse, and "Analyze (actions)" failed with:
+#            "CodeQL could not process any code written in GitHub Actions."
+#            "CodeQL job status was configuration error."
+#        The base branch passes the same job because its diffs do touch
+#        .github/workflows/agentic-compile.yml. Putting a real workflow in this PR's own
+#        diff is the fix.
+#
+# Deliberately does NOT gate on scripts/repo-doctor.sh yet. The doctor currently
+# exits 1 on a real, pre-existing bug — .claude/hooks/hooks.json references 15 scripts
+# under .cursor/hooks/, a directory that does not exist, so none of those hooks have
+# ever run. Gating on it now would paint CI red for a defect this workflow did not
+# introduce and cannot fix. Masking it with continue-on-error would be worse: a check
+# that cannot fail is not a check. It becomes a gate in the PR that repairs the hooks.
+
+name: checks
+
+on:
+  pull_request:
+  push:
+    branches: [The-MDC]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  harness:
+    name: harness checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # Node ships on ubuntu-latest and these scripts are plain CommonJS with no
+      # dependencies, so there is no setup-node step to get wrong.
+      - name: Syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Enumerated by glob rather than by name so a script added later is covered
+          # without anyone remembering to edit this file. The counts are asserted
+          # below: a glob that silently matches nothing is a check that cannot fail.
+          # RECURSIVE, not scripts/*.js — and that distinction already mattered once.
+          # scripts/codex-mcp/server.js lives in a subdirectory, and a top-level glob
+          # walks straight past it, so the MCP shim would have been the one script
+          # here that nothing parsed. find also degrades correctly when a pattern
+          # matches nothing, where an unmatched glob under `set -u` expands to itself
+          # and `node --check 'scripts/*.js'` fails for a confusing reason.
+          sh_count=0
+          while IFS= read -r f; do
+            echo "bash -n $f"; bash -n "$f"; sh_count=$((sh_count+1))
+          done < <(find scripts -name '*.sh' | sort)
+          js_count=0
+          while IFS= read -r f; do
+            echo "node --check $f"; node --check "$f"; js_count=$((js_count+1))
+          done < <(find scripts -name '*.js' | sort)
+          [ "$sh_count" -ge 2 ] || { echo "expected >=2 shell scripts, found $sh_count"; exit 1; }
+          # The floor tracks the real count, or a legitimate change turns CI red for the
+          # wrong reason. It went 2 -> 1 when check-canonical-numbers.js was removed and
+          # port-skills-to-hermes.js was briefly the only *.js here, then back to 2 when
+          # scripts/codex-mcp/server.js arrived. The guard's job is unchanged: fail a glob
+          # that matches nothing.
+          [ "$js_count" -ge 2 ] || { echo "expected >=2 node scripts, found $js_count"; exit 1; }
+
+          # Python is checked too, because check-capabilities.py would otherwise be the only
+          # script in scripts/ that nothing parses. It is Python rather than Node because the
+          # registry is YAML and Node has no YAML parser without adding a dependency to a
+          # repo that deliberately has none -- while CI already runs python3 with PyYAML for
+          # the Hermes config block below.
+          py_count=0
+          while IFS= read -r f; do
+            echo "python3 -m py_compile $f"; python3 -m py_compile "$f"; py_count=$((py_count+1))
+          done < <(find scripts -name '*.py' | sort)
+          [ "$py_count" -ge 1 ] || { echo "expected >=1 python script, found $py_count"; exit 1; }
+
+      # The PowerShell scripts were unverified for three commits, because the
+      # container they were written in has no pwsh and the Syntax step above only
+      # globs *.sh and *.js. They are the scripts that install config onto a real
+      # machine and the ones a takeover depends on, so "unchecked" was the wrong
+      # place for them. ubuntu-latest ships pwsh, so this costs nothing.
+      #
+      # ParseFile against the real PowerShell AST parser, not a regex: it is the
+      # same front end pwsh itself uses, so a file that passes here cannot fail to
+      # parse on the Windows box. It does NOT prove the script behaves correctly --
+      # only that it is syntactically whole.
+      - name: PowerShell syntax
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem scripts -Filter *.ps1 | Sort-Object Name
+          if ($files.Count -lt 3) {
+              Write-Error "expected >=3 PowerShell scripts, found $($files.Count)"
+              exit 1
+          }
+          $bad = 0
+          foreach ($f in $files) {
+              $errors = $null; $tokens = $null
+              [System.Management.Automation.Language.Parser]::ParseFile(
+                  $f.FullName, [ref]$tokens, [ref]$errors) | Out-Null
+              if ($errors -and $errors.Count) {
+                  Write-Host "FAIL  $($f.Name): $($errors.Count) parse error(s)"
+                  foreach ($e in $errors) {
+                      Write-Host ("      line {0}: {1}" -f $e.Extent.StartLineNumber, $e.Message)
+                  }
+                  $bad++
+              } else {
+                  Write-Host "ok    $($f.Name) ($($tokens.Count) tokens)"
+              }
+          }
+          if ($bad) { exit 1 }
+
+      # The Hermes config is data, not code: nothing in this repo executes it, so a
+      # syntax error would surface only on the desktop that copies it into
+      # ~/.hermes/config.yaml — where a malformed file makes Hermes fall back to its
+      # defaults rather than erroring, and the carefully-chosen routing silently does
+      # not apply. Parse it here instead.
+      - name: Hermes config parses, and routes where it claims to
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os, re, tomllib, yaml
+          d = yaml.safe_load(open("configs/hermes/config.yaml"))
+
+          providers = d["providers"]
+          # Assert the key exists before indexing it. Renaming this provider is a
+          # real deployment shape (handoff-2026-09-22.md reports `nvidia`), and
+          # indexing a missing key raises a bare KeyError that names no cause —
+          # the one failure mode most likely to hit someone mid-reconciliation.
+          assert "nvidia-nim" in providers, \
+              "providers: must define 'nvidia-nim' — every custom:nvidia-nim reference " \
+              "in this file resolves through that exact key, so renaming it dangles them all"
+          assert providers["nvidia-nim"]["api"] == "https://integrate.api.nvidia.com/v1", \
+              "the NIM provider must point at NVIDIA's endpoint"
+          assert providers["nvidia-nim"]["key_env"] == "NVIDIA_API_KEY", \
+              "the NIM key must come from the environment, never from this file"
+
+          # Subagents must not reach the parent's endpoint, and must not be able to
+          # fall back onto it. That separation is the whole point of the config; a
+          # regression here quietly burns the parent's rate limit with no symptom.
+          #
+          # The invariant is "a different rate-limit bucket from the parent", and it
+          # has now been narrowed wrongly TWICE, so it is worth stating plainly.
+          # An early revision asserted 127.0.0.1, encoding a local llama-server
+          # rather than the requirement. Its replacement asserted that subagents
+          # avoid nvidia-nim, which encoded the topology where NIM was the PARENT's
+          # bucket. Neither is the rule. When the parent moved to the HF router,
+          # NIM became the children's own bucket and a fan-out there cannot starve
+          # the parent -- so the NIM-specific clause was blocking a correct layout.
+          #
+          # Express the requirement itself and nothing narrower: a different
+          # provider from the parent, and no chain back to it.
+          deleg = d["delegation"]
+          parent_provider = d["model"]["provider"]
+          assert deleg.get("provider"), "subagents must name a provider"
+          assert deleg["provider"] != parent_provider, \
+              "subagents must not share the parent's provider"
+          assert deleg["fallback_providers"] == [], \
+              "subagents must have no fallback chain back onto the parent"
+
+          # Every REMOTE provider authenticates from the environment. One inline key
+          # here would be committed, and the repo's own rule is that secrets never are.
+          #
+          # Loopback is exempt, and the exemption is narrow on purpose: a server on
+          # your own machine authenticates nothing, so its "key" is a placeholder, not
+          # a secret. The exemption is keyed on the host actually resolving to
+          # loopback — not on the provider being *named* "local", which anyone could
+          # do to a remote endpoint and slip a real key past this check.
+          from urllib.parse import urlparse
+          LOOPBACK = {"127.0.0.1", "localhost", "::1", "[::1]"}
+          def is_loopback(url):
+              return (urlparse(url).hostname or "") in LOOPBACK
+
+          for name, prov in providers.items():
+              if is_loopback(prov["api"]):
+                  assert "key_env" not in prov, \
+                      f"{name} is loopback and needs no key_env"
+                  continue
+              assert "key_env" in prov, f"{name} must authenticate via key_env"
+              assert "api_key" not in prov, f"{name} must not carry an inline key"
+
+          # Distinct hosts, or the isolation the whole config exists for is lost.
+          hosts = {urlparse(p_["api"]).netloc for p_ in providers.values()}
+          assert len(hosts) == len(providers), f"providers share a host: {hosts}"
+
+          # The picker must stay pinned. `discover_models` defaults to TRUE, and a
+          # `models:` list alone does not whitelist — Hermes reads that as context-length
+          # overrides and still probes /models. Drop this flag and the HF router and
+          # OpenRouter each pour hundreds of entries back into the picker.
+          for name, prov in providers.items():
+              assert prov.get("discover_models") is False, \
+                  f"{name} must set discover_models: false or the picker unpins"
+              assert prov.get("models"), f"{name} must list its models explicitly"
+
+          # excluded_providers matches case-insensitively against every key a provider
+          # surfaces under, so a provider here NAMED like a built-in would hide itself.
+          # That is why the OpenRouter entry is called or-fallback.
+          excluded = {e.lower() for e in d.get("excluded_providers", [])}
+          clash = excluded & {n.lower() for n in providers}
+          assert not clash, f"provider name collides with its own exclusion: {clash}"
+
+          # Codex is a DELEGATE (subprocess, via the bundled `codex` skill), never a
+          # 5th inference provider. Hermes' own `openai-codex` provider and the Codex
+          # CLI read separate token files against the SAME ChatGPT 5-hour usage
+          # window; turning the provider on makes that window's spend invisible to
+          # itself. See docs/models/codex-handoff.md.
+          assert "openai-codex" in excluded, \
+              "openai-codex must stay in excluded_providers — Codex is delegated to, " \
+              "never wired as a model provider (docs/models/codex-handoff.md)"
+
+          # The research browser must not silently bill an API. Hermes' auto-detection
+          # prefers Firecrawl over SearXNG whenever FIRECRAWL_API_KEY is merely present
+          # in the environment, so the search backend has to be named explicitly.
+          web = d.get("web", {})
+          assert web.get("search_backend") == "searxng", \
+              "web.search_backend must name searxng explicitly, not rely on auto-detect"
+
+          # Match the key SHAPE, not the bare prefix. The config names the prefix in a
+          # comment on purpose, to show where the key goes; matching that would fail
+          # every run and teach people to ignore the check.
+          raw = open("configs/hermes/config.yaml").read()
+          leaked = re.findall(r"nvapi-[A-Za-z0-9_-]{20,}", raw)
+          assert not leaked, "config.yaml contains something shaped like a live NVIDIA key"
+
+          # MCP servers reach the model on EVERY request: each one's tools are
+          # injected into the system prompt. Two invariants, both about throughput
+          # as much as trust.
+          #
+          # 1. Loopback or local subprocess, UNLESS the server is on the hosted
+          #    allowlist below. `hermes import-agent claude-code` migrates
+          #    .mcp.json wholesale, which would drag seven hosted company MCPs
+          #    (supabase, github, alchemy, figma, gmail, drive, netlify) into a
+          #    personal agent build. Each is a round trip and a block of prompt.
+          #
+          #    The allowlist is how a hosted server gets in ON PURPOSE rather than
+          #    by drift: adding one is a visible edit to this file, reviewed, not a
+          #    line that slipped into a config nobody re-reads. Keep it short. Every
+          #    name here costs a round trip per call and prompt space on every
+          #    request, against every bucket at once.
+          # 2. Every server names its tools. An unfiltered server injects its whole
+          #    catalogue forever; on a 40 RPM tier that is a permanent tax.
+          HOSTED_MCP_ALLOWED = {"cloudflare", "submcp"}
+          mcp = d.get("mcp_servers", {}) or {}
+          for name, srv in mcp.items():
+              if "url" in srv:
+                  host = urlparse(srv["url"]).hostname or ""
+                  assert host in LOOPBACK or name in HOSTED_MCP_ALLOWED, \
+                      f"mcp_servers.{name} points off-box at {host} and is not in " \
+                      f"HOSTED_MCP_ALLOWED — add it there deliberately, with a reason, " \
+                      f"or keep it in Claude Code's .mcp.json instead"
+              else:
+                  assert srv.get("command"), \
+                      f"mcp_servers.{name} has neither a loopback url nor a command"
+              tools = srv.get("tools") or {}
+              assert tools.get("include") or tools.get("unfiltered") is True, \
+                  f"mcp_servers.{name} must either name its tools via tools.include or " \
+                  f"declare tools.unfiltered: true — silence is how a server's whole " \
+                  f"catalogue ends up in every request unnoticed"
+
+          # Auxiliary slots default to `auto`, and `auto` means "use the main model".
+          # Left alone, a 2.8T always-thinking model writes your session titles and
+          # spends the same 40 RPM bucket as the conversation. The point of the block
+          # is that these do NOT resolve to the parent provider.
+          aux = d.get("auxiliary", {}) or {}
+          assert aux, "auxiliary: is missing — every side-job would run on the main model"
+          for task, cfg in aux.items():
+              prov = cfg.get("provider", "auto")
+              assert prov != "auto", \
+                  f"auxiliary.{task} is on auto, which routes it to the main model and the parent bucket"
+              # `custom:local` is exempt from the bucket-collision rule below. That
+              # rule protects a metered, RPM-limited CLOUD bucket from a side job
+              # stealing the parent's quota, and Ollama has no RPM quota to steal.
+              # Sharing `custom:local` with the parent is a DIFFERENT, real cost --
+              # VRAM/compute contention between whatever's resident there (as of
+              # 2026-09-28, a 49B parent alongside the 3B floor auxiliary slots) --
+              # just not the failure this specific assertion exists to catch, and
+              # not a reason to weaken it for every other provider too.
+              if prov != "custom:local":
+                  assert prov != parent_provider, \
+                      f"auxiliary.{task} points at the parent provider ({prov}) — that defeats the split"
+              assert cfg.get("model"), f"auxiliary.{task} names a provider but no model"
+
+          # Every provider REFERENCE must resolve to something that can actually
+          # serve. The exclusion check above compares excluded_providers against the
+          # `providers:` dict only — it never looks at what the REST of the file
+          # points at, and both ways a reference dies are silent: Hermes resolves a
+          # dead one by falling back to the main model, so the symptom is a bill and
+          # a latency change, not an error. Both were observed on a live deployment,
+          # recorded in docs/models/handoff-2026-09-22.md.
+          #
+          #   1. The reference names a provider that is also EXCLUDED. The exclusion
+          #      hides it, so the slot silently reverts to the parent. A config with
+          #      moa.aggregator on `anthropic` while `anthropic` sits in the
+          #      exclusion list is the case this catches.
+          #   2. `custom:X` names an X that is not in `providers:` at all, after a
+          #      rename (nvidia-nim -> nvidia) or a deletion. Every reference to the
+          #      old name dangles, and the slots quietly rejoin the parent bucket.
+          def provider_refs():
+              yield "model.provider", parent_provider
+              yield "delegation.provider", deleg["provider"]
+              for task_, cfg_ in aux.items():
+                  yield f"auxiliary.{task_}.provider", cfg_.get("provider")
+              moa = d.get("moa") or {}
+              for i, ref_ in enumerate(moa.get("reference_models") or []):
+                  yield f"moa.reference_models[{i}].provider", (ref_ or {}).get("provider")
+              if moa.get("aggregator"):
+                  yield "moa.aggregator.provider", moa["aggregator"].get("provider")
+
+          for where, ref in provider_refs():
+              if not ref or ref == "auto":
+                  continue
+              custom = ref.startswith("custom:")
+              bare = ref.split(":", 1)[1] if custom else ref
+              assert bare.lower() not in excluded, \
+                  f"{where} names '{bare}', which is in excluded_providers — the " \
+                  f"exclusion hides it and the slot falls back to the main model"
+              if custom:
+                  assert bare in providers, \
+                      f"{where} points at custom provider '{bare}', which is not " \
+                      f"defined in providers: — a rename or deletion left it dangling"
+
+          # The throughput block. These are deliberate, counter-intuitive choices;
+          # a well-meaning edit back to the defaults would quietly undo them.
+          ce = d.get("code_execution", {})
+          assert ce.get("mode") in ("project", "strict"), \
+              "code_execution.mode must be set — it collapses multi-call pipelines into one request"
+
+          # The PARENT model must have a raised compaction threshold, whatever the
+          # parent currently is. This used to hardcode `kimi-k3`, which stopped
+          # guarding anything the moment the parent changed: the key stayed, the
+          # assertion kept passing, and it referred to a model no longer in use.
+          # Resolve the key against the configured parent instead, by substring,
+          # the same way Hermes resolves it.
+          comp = d.get("compression", {})
+          parent_model = d["model"]["default"]
+          thresholds = comp.get("model_thresholds") or {}
+          matched = {k: v for k, v in thresholds.items()
+                     if k.lower() in parent_model.lower()}
+          assert matched, \
+              f"compression.model_thresholds has no key matching the parent model " \
+              f"({parent_model}) -- Hermes matches these by substring, so a stale key " \
+              f"guards nothing and the parent compacts at the global default unnoticed"
+          parent_threshold = matched[max(matched, key=len)]  # longest key wins
+          assert parent_threshold > comp.get("threshold", 0.50), \
+              "the parent's compression threshold must be RAISED above the global " \
+              "default: each compaction is itself a request AND it invalidates the " \
+              "provider prompt cache, so the next request re-reads all of it at full price"
+          assert parent_threshold <= 0.80, \
+              "a parent threshold above 0.80 risks provider-proven overflow, which costs " \
+              "a rejected request plus recovery -- worse than the compaction it avoids"
+
+          # Rotating a credential pool discards the provider-side prompt cache, and
+          # Kimi-K3 carries a large always-thinking prefix. round_robin would pay
+          # that on every selection.
+          pools = d.get("credential_pool_strategies", {})
+          for pname, strat in pools.items():
+              assert strat == "fill_first", \
+                  f"credential_pool_strategies.{pname} is {strat}: only fill_first preserves " \
+                  f"the prompt cache between rotations"
+
+          # If the Codex CLI config template exists, it must not quietly open a
+          # second, custom inference route — that is the same mistake as wiring
+          # openai-codex above, one file over. Optional: this repo works without
+          # ever having adopted Codex at all.
+          codex_toml = "configs/codex/config.toml"
+          codex_forbidden = set()
+          if os.path.exists(codex_toml):
+              with open(codex_toml, "rb") as f:
+                  codex_cfg = tomllib.load(f)
+              codex_forbidden = {"model_provider", "model_providers", "openai_base_url",
+                                  "chatgpt_base_url"} & set(codex_cfg)
+              assert not codex_forbidden, \
+                  f"{codex_toml} sets {codex_forbidden} — Codex must keep its own " \
+                  f"default OpenAI routing, never a silent custom provider " \
+                  f"(docs/models/codex-handoff.md)"
+
+          print("hermes config: OK")
+          print("  primary   ", d["model"]["provider"], d["model"]["default"])
+          print("  subagents ", deleg["provider"], deleg["model"])
+          print("  buckets   ", ", ".join(sorted(hosts)))
+          print("  web       ", web.get("search_backend"), "+", web.get("extract_backend"))
+          hosted_used = sorted(n for n in mcp if n in HOSTED_MCP_ALLOWED)
+          print("  mcp       ", len(mcp), "server(s),",
+                (f"{len(hosted_used)} hosted ({', '.join(hosted_used)})"
+                 if hosted_used else "all loopback/local") + ", all tool-filtered")
+          print("  auxiliary ", len(aux), "slot(s) off the parent bucket ->",
+                sorted({c["provider"] for c in aux.values()}))
+          print("  throughput", "execute_code:" + str(ce.get("mode")),
+                "| parent compress@" + str(parent_threshold),
+                "| pools:" + ",".join(sorted(pools)))
+          print("  picker    ", len([m for p_ in providers.values() for m in p_["models"]]),
+                "models, pinned;", len(excluded), "built-ins excluded")
+          print("  codex     ", "openai-codex excluded as a provider; delegated via "
+                "subprocess" + (" | configs/codex/config.toml: no custom route"
+                if os.path.exists(codex_toml) else " | configs/codex/config.toml: absent"))
+          PY
+
+      # Capabilities were DUPLICATED across two surfaces rather than shared, and the
+      # duplicates diverged with nothing reporting it: 78 skills under .claude/skills/,
+      # 31 under hermes-skills/, nine names in common. Two skills written so the local
+      # tier could take the handoff landed on one surface only and were invisible to the
+      # other.
+      #
+      # capabilities.yaml declares what exists and which surfaces carry it. This step is
+      # what makes that declaration binding rather than decorative. It is NOT a parity
+      # check -- asymmetry is often correct, and hosted MCP servers are kept out of
+      # Hermes on purpose because every tool costs prompt space on every request. It
+      # requires that asymmetry be DECLARED, with a reason.
+      #
+      # It also validates skill frontmatter, which nothing did before. That is not
+      # theoretical: four skills shipped unreachable, three of them since removed,
+      # because a skill with a missing metadata block loads fine and simply never fires.
+      - name: Capabilities match capabilities.yaml
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/check-capabilities.py
+
+      # A doc reference that points at a file which does not exist is the same class
+      # of silent failure as a hook pointing at a missing script: nothing errors, the
+      # reader just follows a dead pointer. One shipped in this PR before this gate
+      # existed — the preflight told people to read local-flash-model.md, which was
+      # never the filename.
+      - name: Doc references resolve
+        shell: bash
+        run: |
+          set -euo pipefail
+          dead=0; checked=0
+          while IFS= read -r ref; do
+            checked=$((checked+1))
+            [ -f "$ref" ] || { echo "DEAD: $ref"; dead=$((dead+1)); }
+          done < <(grep -rhoE 'docs/[a-zA-Z0-9/_-]+\.md' docs scripts configs .github 2>/dev/null | sort -u)
+          echo "checked $checked doc reference(s)"
+          [ "$checked" -gt 0 ] || { echo "found none — the grep is broken"; exit 1; }
+          [ "$dead" -eq 0 ] || exit 1
+
+      # A gate used to live here comparing product figures across the tree, together
+      # with scripts/check-canonical-numbers.js and an assertion that the checker had
+      # not silently examined nothing. It went when the product content went: this
+      # repo is the Hermes + Codex orchestration build and states no such figures, so
+      # the gate now has nothing to compare and could only ever pass vacuously.
+      #
+      # Recorded rather than deleted quietly, because it cost something worth knowing:
+      # the gate walked the WHOLE repo on every PR, so a change that merely reworded a
+      # sentence near a number failed CI for a reason unrelated to the diff — and a
+      # check that fires on unrelated work gets routed around rather than read. A
+      # future session adding a repo-wide content gate should scope it to the files
+      # that can actually carry the thing being checked. The port script's own scrub
+      # assertion is scoped that way: it reads only the tree it just wrote.
