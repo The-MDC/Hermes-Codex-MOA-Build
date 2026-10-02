@@ -1,0 +1,23 @@
+# =============================================================================
+# Hermes Agent — Security Policy: API Keys Excluded Per Security Policy
+# =============================================================================
+# API keys and sensitive values are NEVER committed to this repository.
+# Hermes reads from $HERMES_HOME/.env at runtime — keys are provided by injection
+# from the host environment, not stored in source control.
+#
+# See SECURITY.md for full policy details.
+# =============================================================================
+#
+# Exclude all environment and credential files — these contain sensitive values
+# that must not be version-controlled. Hermes resolves these at runtime.
+.env
+*.env
+*.key
+secrets/
+credentials.json
+#
+# =============================================================================
+# Hermes Runtime: All API keys, tokens, passwords, and credentials are excluded
+# per security policy. They are injected at runtime from $HERMES_HOME/.env.
+# Never commit actual key/secret values to this repository.
+# =============================================================================
