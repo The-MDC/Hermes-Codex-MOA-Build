@@ -1,8 +1,13 @@
----
-name: orca
+---name: orca
 description: ORCA language model skill for Seven6-Hermes-MOA
 category: general
 tags: [orca, stably-ai, 13b, dense-transformer]
+
+metadata:
+  hermes:
+    tags: [orca, stably-ai, 13b, dense-transformer]
+    category: general
+    related_skills: []
 ---
 
 ## ORCA (stably.ai) — 13B Dense Transformer Skill
